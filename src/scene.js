@@ -4,8 +4,9 @@ import * as THREE from 'three';
 export function createScene(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87b9d4);
-  // 거리 안개 — 분위기 + 원경 드로우 절감
-  scene.fog = new THREE.Fog(0x87b9d4, 40, 120);
+  // 거리 안개 — 시야 제한 + 분위기 + 원경 드로우 절감.
+  // near/far는 DayNight가 낮/밤에 따라 보간(밤에 더 자욱).
+  scene.fog = new THREE.Fog(0x87b9d4, 18, 75);
 
   const camera = new THREE.PerspectiveCamera(
     60, window.innerWidth / window.innerHeight, 0.1, 500

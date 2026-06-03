@@ -7,6 +7,10 @@ const NIGHT_SKY = new THREE.Color(0x0b1530);
 const DAY_FOG = new THREE.Color(0x87b9d4);
 const NIGHT_FOG = new THREE.Color(0x0a1228);
 
+// 안개 거리: 낮은 비교적 트이고, 밤은 바짝 좁혀 시야를 강하게 제한.
+const DAY_FOG_NEAR = 18, DAY_FOG_FAR = 75;
+const NIGHT_FOG_NEAR = 6, NIGHT_FOG_FAR = 32;
+
 const CYCLE = 60; // 1주기(초)
 
 export class DayNight {
@@ -63,7 +67,12 @@ export class DayNight {
 
     // 하늘/안개 색 보간
     this.scene.background.copy(NIGHT_SKY).lerp(DAY_SKY, f);
-    if (this.scene.fog) this.scene.fog.color.copy(NIGHT_FOG).lerp(DAY_FOG, f);
+    if (this.scene.fog) {
+      this.scene.fog.color.copy(NIGHT_FOG).lerp(DAY_FOG, f);
+      // 밤일수록 안개를 가깝게 당겨 시야 제한
+      this.scene.fog.near = THREE.MathUtils.lerp(NIGHT_FOG_NEAR, DAY_FOG_NEAR, f);
+      this.scene.fog.far = THREE.MathUtils.lerp(NIGHT_FOG_FAR, DAY_FOG_FAR, f);
+    }
   }
 
   get isNight() { return this.dayFactor < 0.35; }

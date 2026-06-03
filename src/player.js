@@ -1,23 +1,21 @@
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
-// 임시 플레이어(캡슐). 추후 Quaternius 캐릭터 모델로 교체.
-// 3인칭 이동 + 마우스 시점(포인터 잠금) + 점프(중력).
+// 플레이어: 3인칭 이동 + 마우스 시점(포인터 잠금) + 점프(중력).
+// 시각 모델은 Mixamo FBX 캐릭터. this.mesh(Group)가 이동/회전/물리를 담당하고
+// 로드된 모델을 그 자식으로 붙여, 다른 모듈(카메라/동물 AI)은 기존 인터페이스 그대로 사용.
+const PLAYER_PATH = 'assets/player/Player.fbx';
+const TARGET_HEIGHT = 1.9;   // 모델을 정규화할 키(m)
+const FACE_FIX = 0;          // 모델 정면이 진행방향과 반대면 Math.PI 로 변경
+
+const loader = new FBXLoader();
+
 export class Player {
   constructor(scene) {
-    const geo = new THREE.CapsuleGeometry(0.5, 1, 6, 12);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xff7043 });
-    this.mesh = new THREE.Mesh(geo, mat);
+    // 이동/물리/회전을 담당하는 컨테이너 (모델 로드 전에도 동작)
+    this.mesh = new THREE.Group();
     this.mesh.position.set(0, 1, 0);
-    this.mesh.castShadow = true;
     scene.add(this.mesh);
-
-    // 바라보는 방향 표시용 코(임시)
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.2, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0xffffff })
-    );
-    nose.position.set(0, 0.3, -0.6);
-    this.mesh.add(nose);
 
     this.velocityY = 0;
     this.onGround = true;
@@ -25,19 +23,91 @@ export class Player {
     this.cameraPitch = 0.3; // 카메라 상하 각(마우스 Y)
     this.speed = 6;
     this.runSpeed = 11;
-    this.sensitivityX = 1.0;   // 좌우 마우스 감도 (Controls 패널)
-    this.sensitivityY = 1.0;   // 상하 마우스 감도
-    this.cameraDistance = 8;   // 3인칭 카메라 거리
+    this.sensitivityX = 1.0;
+    this.sensitivityY = 1.0;
+    this.cameraDistance = 8;
+    this.turnSpeed = 10;    // 캐릭터 회전 보간 속도(클수록 빠르게 돌아봄)
+    this.groundOffset = 0;  // 발이 모델 원점(y=0)에 정렬되므로 0
+
+    // 애니메이션
+    this.mixer = null;
+    this.actions = {};         // idle/walk/run/jump ...
+    this.current = null;
+    this.pendingClips = [];    // 모델 로드 전 먼저 도착한 외부 애니 클립 보관
 
     this.keys = {};
     this._initInput();
+    this._loadModel();
+  }
+
+  _loadModel() {
+    loader.load(PLAYER_PATH, (fbx) => {
+      // 키 정규화 + 발을 y=0에 정렬
+      const box = new THREE.Box3().setFromObject(fbx);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      fbx.scale.setScalar(TARGET_HEIGHT / (size.y || 1));
+      const box2 = new THREE.Box3().setFromObject(fbx);
+      fbx.position.y -= box2.min.y;
+      fbx.rotation.y = FACE_FIX;
+
+      fbx.traverse((c) => {
+        if (c.isMesh) {
+          c.castShadow = true;
+          c.frustumCulled = false;
+        }
+      });
+
+      this.mesh.add(fbx);
+      this.model = fbx;
+      this.mixer = new THREE.AnimationMixer(fbx);
+
+      // 모델 내장 클립 등록
+      for (const clip of (fbx.animations || [])) {
+        const kind = classifyClip(clip.name);
+        if (kind) this._registerClip(kind, clip);
+      }
+      // 모델보다 먼저 도착해 대기 중이던 외부 클립 반영
+      for (const { kind, clip } of this.pendingClips) this._registerClip(kind, clip);
+      this.pendingClips.length = 0;
+
+      this._setAction('idle', 0);
+    }, undefined, (err) => {
+      console.error('[player] FBX 로드 실패:', err);
+    });
+  }
+
+  // 별도 FBX(스킨 제외 애니)에서 클립을 받아 플레이어 모델에 추가.
+  // 같은 Mixamo 스켈레톤이면 본 이름이 일치해 그대로 재생됨.
+  addAnimation(kind, path) {
+    loader.load(path, (anim) => {
+      const clip = anim.animations && anim.animations[0];
+      if (!clip) return;
+      clip.name = kind;
+      stripRootMotion(clip);   // Mixamo 전진 모션 제거 → 제자리 재생(이동은 코드가 담당)
+      // 모델(믹서)이 준비됐으면 바로 등록, 아니면 대기열에 보관
+      if (this.mixer) this._registerClip(kind, clip);
+      else this.pendingClips.push({ kind, clip });
+    });
+  }
+
+  // 클립을 액션으로 등록. 실제 재생 전환은 매 프레임 update()가 담당.
+  _registerClip(kind, clip) {
+    this.actions[kind] = this.mixer.clipAction(clip);
+  }
+
+  _setAction(kind, fade = 0.2) {
+    const next = this.actions[kind] || this.actions.idle;
+    if (!next || next === this.current) return;
+    next.reset().fadeIn(fade).play();
+    if (this.current) this.current.fadeOut(fade);
+    this.current = next;
   }
 
   _initInput() {
     window.addEventListener('keydown', (e) => (this.keys[e.code] = true));
     window.addEventListener('keyup', (e) => (this.keys[e.code] = false));
 
-    // 포인터 잠금으로 시점 조작
     const canvas = document.getElementById('app');
     canvas.addEventListener('click', () => canvas.requestPointerLock());
     document.addEventListener('mousemove', (e) => {
@@ -49,13 +119,11 @@ export class Player {
     });
   }
 
-  // getHeight: (x, z) → 지형 높이 (buildWorld 완료 전엔 0 반환해도 무방)
   update(dt, camera, getHeight = () => 0) {
     const k = this.keys;
     const running = k['ShiftLeft'] || k['ShiftRight'];
     const spd = running ? this.runSpeed : this.speed;
 
-    // 카메라 yaw 기준 이동 방향 계산
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     const move = new THREE.Vector3();
@@ -64,14 +132,21 @@ export class Player {
     if (k['KeyD']) move.add(right);
     if (k['KeyA']) move.sub(right);
 
-    if (move.lengthSq() > 0) {
+    const moving = move.lengthSq() > 0;
+    if (moving) {
       move.normalize().multiplyScalar(spd * dt);
       this.mesh.position.add(move);
-      const targetAngle = Math.atan2(move.x, move.z);
-      this.mesh.rotation.y = targetAngle;
+      this.targetFacing = Math.atan2(move.x, move.z);
     }
 
-    // 점프 + 중력 (Physically based Animation)
+    // 목표 방향으로 부드럽게 회전(최단 경로) — 즉시 꺾임/순간이동 방지
+    if (this.targetFacing !== undefined) {
+      let diff = this.targetFacing - this.mesh.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff)); // [-π, π]로 래핑
+      this.mesh.rotation.y += diff * Math.min(1, this.turnSpeed * dt);
+    }
+
+    // 점프 + 중력
     if (k['Space'] && this.onGround) {
       this.velocityY = 8;
       this.onGround = false;
@@ -79,18 +154,25 @@ export class Player {
     this.velocityY -= 22 * dt;
     this.mesh.position.y += this.velocityY * dt;
 
-    // 지형 높이에 맞춰 착지 (캡슐 반지름=0.5 + 높이/2=0.5 → 중심이 지형+1 위)
-    const groundY = getHeight(this.mesh.position.x, this.mesh.position.z) + 1;
+    const groundY = getHeight(this.mesh.position.x, this.mesh.position.z) + this.groundOffset;
     if (this.mesh.position.y <= groundY) {
       this.mesh.position.y = groundY;
       this.velocityY = 0;
       this.onGround = true;
     }
 
+    // 애니메이션 상태 선택 (클립이 있을 때만)
+    if (this.mixer) {
+      let kind = 'idle';
+      if (!this.onGround && this.actions.jump) kind = 'jump';
+      else if (moving) kind = running && this.actions.run ? 'run' : 'walk';
+      this._setAction(kind);
+      this.mixer.update(dt);
+    }
+
     this._updateCamera(camera);
   }
 
-  // 3인칭: 플레이어 뒤에서 yaw/pitch 만큼 떨어진 위치로 부드럽게 추적
   _updateCamera(camera) {
     const dist = this.cameraDistance;
     const height = dist * 0.35;
@@ -106,5 +188,30 @@ export class Player {
       this.mesh.position.y + 1.5,
       this.mesh.position.z
     );
+  }
+}
+
+// 클립 이름 → 동작 키워드 (Mixamo/Quaternius 공통)
+function classifyClip(clipName) {
+  const n = (clipName || '').toLowerCase();
+  if (n.includes('idle')) return 'idle';
+  if (n.includes('walk')) return 'walk';
+  if (n.includes('run') || n.includes('jog')) return 'run';
+  if (n.includes('jump')) return 'jump';
+  return null;
+}
+
+// Mixamo 루트 모션 제거: 엉덩이(Hips) 위치 트랙의 수평(X,Z) 성분을 0으로 고정해
+// 제자리 애니메이션으로 만든다. 수직(Y, 상하 흔들림)은 보존.
+// → 클립 반복 시 위치가 리셋되며 뒤로 튀던 현상 해결.
+function stripRootMotion(clip) {
+  for (const track of clip.tracks) {
+    if (/hips?\.position$/i.test(track.name)) {
+      const v = track.values; // [x,y,z, x,y,z, ...]
+      for (let i = 0; i < v.length; i += 3) {
+        v[i] = 0;       // X
+        v[i + 2] = 0;   // Z
+      }
+    }
   }
 }
