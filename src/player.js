@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 // 플레이어: 3인칭 이동 + 마우스 시점(포인터 잠금) + 점프(중력).
-// 시각 모델은 Mixamo FBX 캐릭터. this.mesh(Group)가 이동/회전/물리를 담당하고
-// 로드된 모델을 그 자식으로 붙여, 다른 모듈(카메라/동물 AI)은 기존 인터페이스 그대로 사용.
-const PLAYER_PATH = 'assets/player/Player.fbx';
+// 시각 모델은 Mixamo 캐릭터(glb, idle/walk/run 애니 내장 + webp 텍스처로 경량화).
+// this.mesh(Group)가 이동/회전/물리를 담당하고, 로드된 모델을 그 자식으로 붙여
+// 다른 모듈(카메라/동물 AI)은 기존 인터페이스 그대로 사용.
+const PLAYER_PATH = 'assets/player/Player.glb';
 const TARGET_HEIGHT = 1.9;   // 모델을 정규화할 키(m)
 const FACE_FIX = 0;          // 모델 정면이 진행방향과 반대면 Math.PI 로 변경
 
-const loader = new FBXLoader();
+const loader = new GLTFLoader();
 
 export class Player {
   constructor(scene) {
@@ -33,7 +34,6 @@ export class Player {
     this.mixer = null;
     this.actions = {};         // idle/walk/run/jump ...
     this.current = null;
-    this.pendingClips = [];    // 모델 로드 전 먼저 도착한 외부 애니 클립 보관
 
     this.keys = {};
     this._initInput();
@@ -41,59 +41,40 @@ export class Player {
   }
 
   _loadModel() {
-    loader.load(PLAYER_PATH, (fbx) => {
+    loader.load(PLAYER_PATH, (gltf) => {
+      const model = gltf.scene;
       // 키 정규화 + 발을 y=0에 정렬
-      const box = new THREE.Box3().setFromObject(fbx);
+      const box = new THREE.Box3().setFromObject(model);
       const size = new THREE.Vector3();
       box.getSize(size);
-      fbx.scale.setScalar(TARGET_HEIGHT / (size.y || 1));
-      const box2 = new THREE.Box3().setFromObject(fbx);
-      fbx.position.y -= box2.min.y;
-      fbx.rotation.y = FACE_FIX;
+      model.scale.setScalar(TARGET_HEIGHT / (size.y || 1));
+      const box2 = new THREE.Box3().setFromObject(model);
+      model.position.y -= box2.min.y;
+      model.rotation.y = FACE_FIX;
 
-      fbx.traverse((c) => {
+      model.traverse((c) => {
         if (c.isMesh) {
           c.castShadow = true;
           c.frustumCulled = false;
         }
       });
 
-      this.mesh.add(fbx);
-      this.model = fbx;
-      this.mixer = new THREE.AnimationMixer(fbx);
+      this.mesh.add(model);
+      this.model = model;
+      this.mixer = new THREE.AnimationMixer(model);
 
-      // 모델 내장 클립 등록
-      for (const clip of (fbx.animations || [])) {
+      // glb 내장 클립(idle/walk/run) 등록 + Mixamo 전진 모션 제거
+      for (const clip of (gltf.animations || [])) {
         const kind = classifyClip(clip.name);
-        if (kind) this._registerClip(kind, clip);
+        if (!kind) continue;
+        stripRootMotion(clip);
+        this.actions[kind] = this.mixer.clipAction(clip);
       }
-      // 모델보다 먼저 도착해 대기 중이던 외부 클립 반영
-      for (const { kind, clip } of this.pendingClips) this._registerClip(kind, clip);
-      this.pendingClips.length = 0;
 
       this._setAction('idle', 0);
     }, undefined, (err) => {
-      console.error('[player] FBX 로드 실패:', err);
+      console.error('[player] GLB 로드 실패:', err);
     });
-  }
-
-  // 별도 FBX(스킨 제외 애니)에서 클립을 받아 플레이어 모델에 추가.
-  // 같은 Mixamo 스켈레톤이면 본 이름이 일치해 그대로 재생됨.
-  addAnimation(kind, path) {
-    loader.load(path, (anim) => {
-      const clip = anim.animations && anim.animations[0];
-      if (!clip) return;
-      clip.name = kind;
-      stripRootMotion(clip);   // Mixamo 전진 모션 제거 → 제자리 재생(이동은 코드가 담당)
-      // 모델(믹서)이 준비됐으면 바로 등록, 아니면 대기열에 보관
-      if (this.mixer) this._registerClip(kind, clip);
-      else this.pendingClips.push({ kind, clip });
-    });
-  }
-
-  // 클립을 액션으로 등록. 실제 재생 전환은 매 프레임 update()가 담당.
-  _registerClip(kind, clip) {
-    this.actions[kind] = this.mixer.clipAction(clip);
   }
 
   _setAction(kind, fade = 0.2) {

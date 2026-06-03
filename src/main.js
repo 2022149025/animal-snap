@@ -15,9 +15,6 @@ const { scene, camera, renderer, sun, hemi } = createScene(canvas);
 buildWorld(scene, { area: 95 }).then(() => console.log('[world] built'));
 
 const player = new Player(scene);
-player.addAnimation('idle', 'assets/player/Idle.fbx');
-player.addAnimation('walk', 'assets/player/Walking.fbx');
-player.addAnimation('run',  'assets/player/Running.fbx');
 
 // 동물 스폰 (지형 높이 전달)
 const animalMgr = new AnimalManager(scene);
