@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__pdf-viewer__list_pdfs"
+    ]
+  }
+}
