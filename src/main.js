@@ -7,7 +7,7 @@ import { buildWorld, getTerrainHeight } from './world.js';
 import { Doomsday } from './doomsday.js';
 import { Flashlight } from './flashlight.js';
 import { createSettingsPanel } from './settings.js';
-import { showIntro } from './intro.js';
+import { IntroCinematic } from './intro3d.js';
 
 const canvas = document.getElementById('app');
 const { scene, camera, renderer, sun, hemi } = createScene(canvas);
@@ -39,20 +39,29 @@ const flashlight = new Flashlight(scene, camera);
 // Controls 패널 (감도, 카메라 거리, 종말 시간 등)
 createSettingsPanel(player, doomsday, cameraMode);
 
-// 디버그 핸들 (개발용)
-window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, doomsday, flashlight };
+// 3D 시네마틱 인트로 (게임 씬 위에서 카메라 연출 + 운석). 종료 시 게임플레이 시작.
+const intro = new IntroCinematic(scene, camera, doomsday);
+let introActive = true;
+intro.onDone = () => { introActive = false; };
 
-// 인트로 종료 후 종말 카운트다운 시작
-showIntro(() => doomsday.start());
+// 디버그 핸들 (개발용)
+window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, doomsday, flashlight, intro };
 
 let last = performance.now();
 function animate(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  player.update(dt, camera, getTerrainHeight);
-  animalMgr.update(dt, player.mesh.position, getTerrainHeight);
-  cameraMode.update(dt);
-  doomsday.update(dt);
+  if (introActive) {
+    // 인트로 중: 카메라는 시네마틱이 제어, 동물은 살아 움직이게 둠
+    intro.update(dt);
+    animalMgr.update(dt, player.mesh.position, getTerrainHeight);
+    doomsday.update(dt);
+  } else {
+    player.update(dt, camera, getTerrainHeight);
+    animalMgr.update(dt, player.mesh.position, getTerrainHeight);
+    cameraMode.update(dt);
+    doomsday.update(dt);
+  }
   flashlight.update(doomsday.dayFactor);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
