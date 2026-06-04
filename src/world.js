@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const fbxLoader = new FBXLoader();
+const gltfLoader = new GLTFLoader();
 const texLoader = new THREE.TextureLoader();
 
 // ─── 지형 높이 함수 ────────────────────────────────────────────────────
@@ -45,6 +47,27 @@ function loadFBX(path, targetH) {
   if (_cache[k]) return _cache[k];
   _cache[k] = new Promise((res, rej) => {
     fbxLoader.load(path, (o) => {
+      if (targetH) {
+        const b = new THREE.Box3().setFromObject(o);
+        const s = new THREE.Vector3(); b.getSize(s);
+        o.scale.setScalar(targetH / (s.y || 1));
+      }
+      const b2 = new THREE.Box3().setFromObject(o);
+      o.position.y -= b2.min.y;
+      o.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+      res(o);
+    }, undefined, rej);
+  });
+  return _cache[k];
+}
+
+// glTF 캐시 로더 (텍스처 내장 — applyTex 불필요). targetH로 높이 정규화.
+function loadGLTF(path, targetH) {
+  const k = 'g:' + path + '@' + targetH;
+  if (_cache[k]) return _cache[k];
+  _cache[k] = new Promise((res, rej) => {
+    gltfLoader.load(path, (g) => {
+      const o = g.scene;
       if (targetH) {
         const b = new THREE.Box3().setFromObject(o);
         const s = new THREE.Vector3(); b.getSize(s);
@@ -430,6 +453,43 @@ export async function buildWorld(scene, { area = 95 } = {}) {
   // ── 풀 (Instanced Mesh, 대량) ──────────────────────────────────────────
   scatterInstanced(scene, grass,      1000, area);
   scatterInstanced(scene, grassShort,  600, area);
+
+  // ── Nature Megapack (glTF, 텍스처 내장) — 단풍나무·덤불·꽃 추가로 숲 풍성하게 ──
+  const NM = 'assets/nature_megapack/glTF/';
+  const [
+    maple1, maple2, maple3, maple4, maple5,
+    deadA, deadB, deadC,
+    bushFlowers, bushLargeFlowers, bushSmallFlowers,
+    flower1Clump, flower2Clump, flower3Clump, flower4Clump, flower5Clump,
+  ] = await Promise.all([
+    loadGLTF(NM + 'MapleTree_1.gltf', 9 * TREE_S),
+    loadGLTF(NM + 'MapleTree_2.gltf', 9.5 * TREE_S),
+    loadGLTF(NM + 'MapleTree_3.gltf', 8.5 * TREE_S),
+    loadGLTF(NM + 'MapleTree_4.gltf', 9 * TREE_S),
+    loadGLTF(NM + 'MapleTree_5.gltf', 10 * TREE_S),
+    loadGLTF(NM + 'DeadTree_3.gltf', 7 * TREE_S),
+    loadGLTF(NM + 'DeadTree_6.gltf', 6.5 * TREE_S),
+    loadGLTF(NM + 'DeadTree_9.gltf', 7.5 * TREE_S),
+    loadGLTF(NM + 'Bush_Flowers.gltf', 1.0),
+    loadGLTF(NM + 'Bush_Large_Flowers.gltf', 1.4),
+    loadGLTF(NM + 'Bush_Small_Flowers.gltf', 0.7),
+    loadGLTF(NM + 'Flower_1_Clump.gltf', 0.5),
+    loadGLTF(NM + 'Flower_2_Clump.gltf', 0.5),
+    loadGLTF(NM + 'Flower_3_Clump.gltf', 0.5),
+    loadGLTF(NM + 'Flower_4_Clump.gltf', 0.5),
+    loadGLTF(NM + 'Flower_5_Clump.gltf', 0.5),
+  ]);
+
+  scatter(scene, maple1, 8, { area, inner:18, scaleVar:0.25, record:treePos, leafRadius:5 });
+  scatter(scene, maple2, 8, { area, inner:18, scaleVar:0.3,  record:treePos, leafRadius:5 });
+  scatter(scene, maple3, 7, { area, inner:20, scaleVar:0.25, record:treePos, leafRadius:4.5 });
+  scatter(scene, maple4, 7, { area, inner:18, scaleVar:0.3,  record:treePos, leafRadius:5 });
+  scatter(scene, maple5, 6, { area, inner:20, scaleVar:0.25, record:treePos, leafRadius:5.5 });
+  scatter(scene, deadA, 4, { area, inner:22, scaleVar:0.35, record:treePos, leafRadius:3.5 });
+  scatter(scene, deadB, 4, { area, inner:22, scaleVar:0.35, record:treePos, leafRadius:3.5 });
+  scatter(scene, deadC, 3, { area, inner:24, scaleVar:0.35, record:treePos, leafRadius:3.5 });
+  scatterMixed(scene, [bushFlowers, bushLargeFlowers, bushSmallFlowers], 22, { area, inner:10, scaleVar:0.4 });
+  scatterMixed(scene, [flower1Clump, flower2Clump, flower3Clump, flower4Clump, flower5Clump], 40, { area, inner:6, scaleVar:0.5 });
 
   // ── 낙엽 마스크: 수집한 나무 위치로 생성 → 지형 셰이더에 주입 ──────────────
   leafMask.value = buildLeafMask(treePos);

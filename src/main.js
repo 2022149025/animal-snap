@@ -19,7 +19,11 @@ const player = new Player(scene);
 // 동물 스폰 (지형 높이 전달)
 const animalMgr = new AnimalManager(scene);
 animalMgr.spawn(
-  { Cow: 2, Horse: 2, Zebra: 2, Pig: 2, Sheep: 2, Rat: 2, Frog: 2, Spider: 2, Trex: 1, Triceratops: 1 },
+  {
+    Cow: 2, Horse: 2, Zebra: 2, Pig: 2, Sheep: 2, Rat: 2, Frog: 2, Spider: 2, Trex: 1, Triceratops: 1,
+    // 추가 동물
+    Deer: 3, Stag: 2, Fox: 3, Wolf: 2, Alpaca: 2, Bull: 2, Donkey: 2, Husky: 2, ShibaInu: 2,
+  },
   { bounds: 90, getHeight: getTerrainHeight }
 ).then((agents) => console.log('[spawn] total animals:', agents.length));
 
