@@ -17,7 +17,7 @@ const PATH = [
 const CAPTIONS = [
   { t0: 0.4, t1: 5.4, tag: '🔴 BREAKING NEWS', title: '거대 소행성, 충돌 궤도 진입',
     body: '국제천문연맹 긴급 발표 — 사흘 뒤, 막을 수 없는 충돌.' },
-  { t0: 8.6, t1: 15.4, tag: '📷 당신의 선택', title: '마지막 기록',
+  { t0: 8.6, t1: 15.4, tag: '📷 어느 사진가의 다짐', title: '마지막 기록',
     body: '사라지기 전에, 이 행성의 살아있는 모든 것을 카메라에 담는다.' },
 ];
 
@@ -104,8 +104,10 @@ export class IntroCinematic {
       #intro3d .cap .tag { display:inline-block; font:bold 13px monospace; letter-spacing:.15em;
         color:#ff6a44; border:1px solid #ff6a4477; background:rgba(0,0,0,.35); padding:4px 12px;
         border-radius:4px; margin-bottom:14px; }
-      #intro3d .cap h1 { font-size:clamp(22px,4.2vw,42px); margin:0 0 10px; }
-      #intro3d .cap p { font-size:clamp(14px,1.9vw,19px); color:#e7ebf0; margin:0; }
+      #intro3d .cap h1 { font-family:'Nanum Myeongjo',serif; font-weight:800;
+        font-size:clamp(24px,4.6vw,46px); margin:0 0 12px; letter-spacing:.02em; }
+      #intro3d .cap p { font-family:'Nanum Myeongjo',serif; font-weight:400;
+        font-size:clamp(14px,1.9vw,20px); color:#e7ebf0; margin:0; letter-spacing:.01em; }
       #intro3d .skip { position:absolute; top:calc(9vh + 14px); right:22px; pointer-events:auto;
         background:rgba(0,0,0,.4); color:#cfd6df; border:1px solid #ffffff33; border-radius:6px;
         padding:8px 16px; font:bold 13px sans-serif; cursor:pointer; }
