@@ -17,7 +17,7 @@ const PATH = [
 const CAPTIONS = [
   { t0: 0.4, t1: 5.4, tag: '🔴 BREAKING NEWS', title: '거대 소행성, 충돌 궤도 진입',
     body: '국제천문연맹 긴급 발표 — 사흘 뒤, 막을 수 없는 충돌.' },
-  { t0: 8.6, t1: 15.4, tag: '📷 어느 사진가의 다짐', title: '마지막 기록',
+  { t0: 8.6, t1: 15.4, tag: '', title: '마지막 기록',
     body: '사라지기 전에, 이 행성의 살아있는 모든 것을 카메라에 담는다.' },
 ];
 
@@ -142,6 +142,7 @@ export class IntroCinematic {
       else {
         const c = CAPTIONS[idx];
         this._capTag.textContent = c.tag;
+        this._capTag.style.display = c.tag ? '' : 'none';
         this._capTitle.textContent = c.title;
         this._capBody.textContent = c.body;
         this._capEl.classList.add('on');
