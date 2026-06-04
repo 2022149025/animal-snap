@@ -1,8 +1,8 @@
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 // Controls 패널 — 우상단 lil-gui
-// player, dayNight 객체를 받아 실시간 연결
-export function createSettingsPanel(player, dayNight, cameraMode) {
+// player, doomsday 객체를 받아 실시간 연결
+export function createSettingsPanel(player, doomsday, cameraMode) {
   const gui = new GUI({ title: 'Controls', width: 220 });
 
   const params = {
@@ -10,9 +10,8 @@ export function createSettingsPanel(player, dayNight, cameraMode) {
     '카메라 거리': 8,
     '상하 감도':   1.0,
     '카메라 줌':   1.9,   // 촬영(C) 모드 줌 배율
-    '낮밤 속도':   0.25,
-    '낮으로':      () => { dayNight.action.time = 0; dayNight.mixer.update(0); dayNight.update(0); },
-    '밤으로':      () => { dayNight.action.time = 30; dayNight.mixer.update(0); dayNight.update(0); },
+    '종말 시간(분)': doomsday ? doomsday.duration / 60 : 10,
+    '막바지로 ▶': () => { if (doomsday) doomsday.elapsed = doomsday.duration * 0.82; }, // 데모/테스트용
   };
 
   // 마우스 감도
@@ -37,16 +36,13 @@ export function createSettingsPanel(player, dayNight, cameraMode) {
     });
   }
 
-  // 낮밤 속도
-  gui.add(params, '낮밤 속도', 0, 1, 0.05).onChange(v => {
-    dayNight.mixer.timeScale = v;
-  });
-
-  // 낮/밤 즉시 전환 버튼
-  const timeFolder = gui.addFolder('시간 전환');
-  timeFolder.add(params, '낮으로');
-  timeFolder.add(params, '밤으로');
-  timeFolder.close();
+  // 종말 시간(분) — 한 판(=3일)의 실제 길이
+  if (doomsday) {
+    gui.add(params, '종말 시간(분)', 2, 30, 1).onChange(v => {
+      doomsday.duration = v * 60;
+    });
+    gui.add(params, '막바지로 ▶'); // 데모: 종말 직전으로 점프
+  }
 
   return gui;
 }

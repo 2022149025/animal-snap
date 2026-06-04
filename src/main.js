@@ -4,9 +4,10 @@ import { AnimalManager } from './animalAI.js';
 import { UI } from './ui.js';
 import { CameraMode } from './cameraMode.js';
 import { buildWorld, getTerrainHeight } from './world.js';
-import { DayNight } from './dayNight.js';
+import { Doomsday } from './doomsday.js';
 import { Flashlight } from './flashlight.js';
 import { createSettingsPanel } from './settings.js';
+import { showIntro } from './intro.js';
 
 const canvas = document.getElementById('app');
 const { scene, camera, renderer, sun, hemi } = createScene(canvas);
@@ -31,15 +32,18 @@ animalMgr.spawn(
 const ui = new UI();
 const cameraMode = new CameraMode(camera, renderer, animalMgr, ui, player);
 
-// 낮밤 사이클 + 손전등
-const dayNight = new DayNight(scene, sun, hemi);
+// 종말 진행(붉어지는 하늘 + 카운트다운) + 손전등
+const doomsday = new Doomsday(scene, sun, hemi, { duration: 600 }); // 기본 10분
 const flashlight = new Flashlight(scene, camera);
 
-// Controls 패널 (감도, 카메라 거리 등)
-createSettingsPanel(player, dayNight, cameraMode);
+// Controls 패널 (감도, 카메라 거리, 종말 시간 등)
+createSettingsPanel(player, doomsday, cameraMode);
 
 // 디버그 핸들 (개발용)
-window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, dayNight, flashlight };
+window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, doomsday, flashlight };
+
+// 인트로 종료 후 종말 카운트다운 시작
+showIntro(() => doomsday.start());
 
 let last = performance.now();
 function animate(now) {
@@ -48,8 +52,8 @@ function animate(now) {
   player.update(dt, camera, getTerrainHeight);
   animalMgr.update(dt, player.mesh.position, getTerrainHeight);
   cameraMode.update(dt);
-  dayNight.update(dt);
-  flashlight.update(dayNight.dayFactor);
+  doomsday.update(dt);
+  flashlight.update(doomsday.dayFactor);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
