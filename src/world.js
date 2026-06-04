@@ -298,6 +298,10 @@ export async function buildWorld(scene, { area = 95 } = {}) {
   const { leafMask } = createGround(scene);
   const treePos = [];   // 낙엽 마스크용 나무 위치 수집
 
+  // 지형지물 크기 배수 (지형감 강조 — 값만 바꿔 일괄 조정)
+  const TREE_S = 1.45;
+  const ROCK_S = 2.1;
+
   // 텍스처 미리 생성
   const tb = T.treeBark(), tl = T.treeLeaves();
   const bb = T.birchBark(), bg = T.birchGreen(), by = T.birchYellow();
@@ -331,35 +335,35 @@ export async function buildWorld(scene, { area = 95 } = {}) {
     grass, grassShort,
   ] = await Promise.all([
     // trees/ 팩
-    loadFBX('assets/trees/FBX/Tree_1.fbx', 7),
-    loadFBX('assets/trees/FBX/Tree_3.fbx', 8),
-    loadFBX('assets/trees/FBX/Tree_6.fbx', 6.5),
-    loadFBX('assets/trees/FBX/Tree_9.fbx', 7.5),
-    loadFBX('assets/trees/FBX/Birch_2.fbx', 7),
-    loadFBX('assets/trees/FBX/Birch_5.fbx', 8),
-    loadFBX('assets/trees/FBX/Birch_8.fbx', 6.5),
-    loadFBX('assets/trees/FBX/DeadTree_2.fbx', 7),
-    loadFBX('assets/trees/FBX/DeadTree_5.fbx', 6),
-    loadFBX('assets/trees/FBX/Pine_2.fbx', 8),
-    loadFBX('assets/trees/FBX/Pine_4.fbx', 9),
+    loadFBX('assets/trees/FBX/Tree_1.fbx', 7 * TREE_S),
+    loadFBX('assets/trees/FBX/Tree_3.fbx', 8 * TREE_S),
+    loadFBX('assets/trees/FBX/Tree_6.fbx', 6.5 * TREE_S),
+    loadFBX('assets/trees/FBX/Tree_9.fbx', 7.5 * TREE_S),
+    loadFBX('assets/trees/FBX/Birch_2.fbx', 7 * TREE_S),
+    loadFBX('assets/trees/FBX/Birch_5.fbx', 8 * TREE_S),
+    loadFBX('assets/trees/FBX/Birch_8.fbx', 6.5 * TREE_S),
+    loadFBX('assets/trees/FBX/DeadTree_2.fbx', 7 * TREE_S),
+    loadFBX('assets/trees/FBX/DeadTree_5.fbx', 6 * TREE_S),
+    loadFBX('assets/trees/FBX/Pine_2.fbx', 8 * TREE_S),
+    loadFBX('assets/trees/FBX/Pine_4.fbx', 9 * TREE_S),
     // nature/ 팩
-    loadFBX('assets/nature/FBX/PineTree_2.fbx', 8),
-    loadFBX('assets/nature/FBX/PineTree_4.fbx', 9),
-    loadFBX('assets/nature/FBX/PineTree_Autumn_3.fbx', 8),
-    loadFBX('assets/nature/FBX/CommonTree_2.fbx', 7),
-    loadFBX('assets/nature/FBX/CommonTree_Autumn_4.fbx', 7),
-    loadFBX('assets/nature/FBX/CommonTree_Dead_1.fbx', 6),
-    loadFBX('assets/nature/FBX/Willow_3.fbx', 8),
-    loadFBX('assets/nature/FBX/Willow_Autumn_2.fbx', 8),
-    loadFBX('assets/nature/FBX/Willow_Dead_1.fbx', 7),
-    loadFBX('assets/nature/FBX/BirchTree_3.fbx', 7),
-    loadFBX('assets/nature/FBX/BirchTree_Autumn_2.fbx', 7),
+    loadFBX('assets/nature/FBX/PineTree_2.fbx', 8 * TREE_S),
+    loadFBX('assets/nature/FBX/PineTree_4.fbx', 9 * TREE_S),
+    loadFBX('assets/nature/FBX/PineTree_Autumn_3.fbx', 8 * TREE_S),
+    loadFBX('assets/nature/FBX/CommonTree_2.fbx', 7 * TREE_S),
+    loadFBX('assets/nature/FBX/CommonTree_Autumn_4.fbx', 7 * TREE_S),
+    loadFBX('assets/nature/FBX/CommonTree_Dead_1.fbx', 6 * TREE_S),
+    loadFBX('assets/nature/FBX/Willow_3.fbx', 8 * TREE_S),
+    loadFBX('assets/nature/FBX/Willow_Autumn_2.fbx', 8 * TREE_S),
+    loadFBX('assets/nature/FBX/Willow_Dead_1.fbx', 7 * TREE_S),
+    loadFBX('assets/nature/FBX/BirchTree_3.fbx', 7 * TREE_S),
+    loadFBX('assets/nature/FBX/BirchTree_Autumn_2.fbx', 7 * TREE_S),
     // 바닥 오브젝트
-    loadFBX('assets/nature/FBX/Rock_2.fbx', 1.4),
-    loadFBX('assets/nature/FBX/Rock_5.fbx', 1.0),
-    loadFBX('assets/nature/FBX/Rock_7.fbx', 1.8),
-    loadFBX('assets/nature/FBX/Rock_Moss_2.fbx', 1.2),
-    loadFBX('assets/nature/FBX/Rock_Moss_6.fbx', 0.9),
+    loadFBX('assets/nature/FBX/Rock_2.fbx', 1.4 * ROCK_S),
+    loadFBX('assets/nature/FBX/Rock_5.fbx', 1.0 * ROCK_S),
+    loadFBX('assets/nature/FBX/Rock_7.fbx', 1.8 * ROCK_S),
+    loadFBX('assets/nature/FBX/Rock_Moss_2.fbx', 1.2 * ROCK_S),
+    loadFBX('assets/nature/FBX/Rock_Moss_6.fbx', 0.9 * ROCK_S),
     loadFBX('assets/nature/FBX/Bush_1.fbx', 1.0),
     loadFBX('assets/nature/FBX/BushBerries_1.fbx', 0.9),
     loadFBX('assets/nature/FBX/TreeStump.fbx', 0.7),

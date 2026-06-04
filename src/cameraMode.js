@@ -7,12 +7,16 @@ const CENTER_TOL = 0.28;   // 화면 중앙 허용 반경(NDC)
 
 // 카메라(촬영) 모드: 줌, 뷰파인더, 촬영 판정
 export class CameraMode {
-  constructor(camera, renderer, animalMgr, ui) {
+  constructor(camera, renderer, animalMgr, ui, player) {
     this.camera = camera;
     this.renderer = renderer;
     this.animalMgr = animalMgr;
     this.ui = ui;
+    this.player = player;
     this.active = false;
+    this._prevFirstPerson = false;
+    this.normalFov = NORMAL_FOV;
+    this.zoomFov = ZOOM_FOV;   // 촬영 줌 FOV (작을수록 더 확대) — 설정 패널에서 조절
     this.targetFov = NORMAL_FOV;
     this._tmp = new THREE.Vector3();
 
@@ -29,13 +33,22 @@ export class CameraMode {
 
   toggle() {
     this.active = !this.active;
-    this.targetFov = this.active ? ZOOM_FOV : NORMAL_FOV;
     this.ui.setCameraMode(this.active);
+    // 촬영 모드 = 플레이어 1인칭 시점. 종료 시 이전 시점 복귀.
+    if (this.player) {
+      if (this.active) {
+        this._prevFirstPerson = this.player.firstPerson;
+        this.player.setFirstPerson(true);
+      } else {
+        this.player.setFirstPerson(this._prevFirstPerson);
+      }
+    }
   }
 
   update(dt) {
-    // FOV 부드럽게 보간 (줌)
+    // FOV 부드럽게 보간 (줌) — 활성 상태/줌 설정을 매 프레임 반영해 실시간 조절 가능
     const cam = this.camera;
+    this.targetFov = this.active ? this.zoomFov : this.normalFov;
     cam.fov += (this.targetFov - cam.fov) * Math.min(dt * 8, 1);
     cam.updateProjectionMatrix();
 

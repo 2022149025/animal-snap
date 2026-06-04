@@ -25,14 +25,14 @@ animalMgr.spawn(
 
 // UI + 카메라(촬영) 모드
 const ui = new UI();
-const cameraMode = new CameraMode(camera, renderer, animalMgr, ui);
+const cameraMode = new CameraMode(camera, renderer, animalMgr, ui, player);
 
 // 낮밤 사이클 + 손전등
 const dayNight = new DayNight(scene, sun, hemi);
 const flashlight = new Flashlight(scene, camera);
 
 // Controls 패널 (감도, 카메라 거리 등)
-createSettingsPanel(player, dayNight);
+createSettingsPanel(player, dayNight, cameraMode);
 
 // 디버그 핸들 (개발용)
 window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, dayNight, flashlight };

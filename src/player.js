@@ -178,8 +178,12 @@ export class Player {
 
   // V: 1·3인칭 전환. 1인칭에선 캐릭터 모델을 숨겨 머리 안이 보이지 않게.
   toggleView() {
-    this.firstPerson = !this.firstPerson;
-    if (this.model) this.model.visible = !this.firstPerson;
+    this.setFirstPerson(!this.firstPerson);
+  }
+
+  setFirstPerson(v) {
+    this.firstPerson = v;
+    if (this.model) this.model.visible = !v;
   }
 
   _updateCamera(camera) {
@@ -228,16 +232,17 @@ function classifyClip(clipName) {
   return null;
 }
 
-// Mixamo 루트 모션 제거: 엉덩이(Hips) 위치 트랙의 수평(X,Z) 성분을 0으로 고정해
-// 제자리 애니메이션으로 만든다. 수직(Y, 상하 흔들림)은 보존.
-// → 클립 반복 시 위치가 리셋되며 뒤로 튀던 현상 해결.
+// Mixamo 루트 모션 제거: 엉덩이(Hips) 위치 트랙을 첫 프레임 값으로 고정해
+// 완전한 제자리 애니메이션으로 만든다(이동은 코드가 담당).
+// glTF 변환 시 전진 모션이 Y축으로 들어가기도 하므로 X·Y·Z 모두 고정해야
+// 클립 반복마다 위치가 리셋되며 순간이동하던 현상이 사라진다.
 function stripRootMotion(clip) {
   for (const track of clip.tracks) {
     if (/hips?\.position$/i.test(track.name)) {
       const v = track.values; // [x,y,z, x,y,z, ...]
+      const x0 = v[0], y0 = v[1], z0 = v[2];
       for (let i = 0; i < v.length; i += 3) {
-        v[i] = 0;       // X
-        v[i + 2] = 0;   // Z
+        v[i] = x0; v[i + 1] = y0; v[i + 2] = z0;
       }
     }
   }
