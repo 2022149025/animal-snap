@@ -79,7 +79,7 @@ function applyTex(obj, rules) {
 }
 
 // ─── 배치 함수들 ──────────────────────────────────────────────────────
-function scatter(scene, proto, count, { area = 90, inner = 16, scaleVar = 0.3 } = {}) {
+function scatter(scene, proto, count, { area = 90, inner = 16, scaleVar = 0.3, record = null, leafRadius = 4 } = {}) {
   for (let i = 0; i < count; i++) {
     const o = proto.clone();
     const angle = Math.random() * Math.PI * 2;
@@ -87,7 +87,10 @@ function scatter(scene, proto, count, { area = 90, inner = 16, scaleVar = 0.3 } 
     const wx = Math.cos(angle) * r, wz = Math.sin(angle) * r;
     o.position.set(wx, _h(wx, wz), wz);
     o.rotation.y = Math.random() * Math.PI * 2;
-    o.scale.multiplyScalar(1 + (Math.random() - 0.5) * 2 * scaleVar);
+    const sf = 1 + (Math.random() - 0.5) * 2 * scaleVar;
+    o.scale.multiplyScalar(sf);
+    // record: 낙엽 마스크용 나무 위치/반경 수집
+    if (record) record.push({ x: wx, z: wz, r: leafRadius * sf });
     scene.add(o);
   }
 }
@@ -181,6 +184,39 @@ function makeTexLeaves() {
   });
 }
 
+// 월드 좌표 ↔ 마스크 UV 매핑에 쓰는 지형 크기(중심 0, ±HALF)
+const GROUND_SIZE = 400;
+const GROUND_HALF = GROUND_SIZE / 2;
+
+// 나무 위치 목록으로 낙엽 마스크 텍스처 생성.
+// 각 나무 자리에 부드러운 흰 원을 찍어, 셰이더가 그 영역에서만 낙엽을 깔도록 함.
+function buildLeafMask(trees, size = 1024) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+  const px = size / GROUND_SIZE;          // 월드 1단위 = px 픽셀
+  ctx.globalCompositeOperation = 'lighter'; // 겹치는 나무는 누적
+  for (const t of trees) {
+    const cx = ((t.x + GROUND_HALF) / GROUND_SIZE) * size;
+    const cy = ((t.z + GROUND_HALF) / GROUND_SIZE) * size; // flipY=false 로 z→v 직접 매핑
+    const rad = t.r * px;
+    const g = ctx.createRadialGradient(cx, cy, rad * 0.2, cx, cy, rad);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.flipY = false;                 // (u,v) → 캔버스 (u,v) 직접 매핑
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 // ─── 지형 메쉬 + 멀티 텍스처 블렌딩 (onBeforeCompile GLSL 주입) ───────────
 export function createGround(scene) {
   const SEG = 128;
@@ -197,11 +233,17 @@ export function createGround(scene) {
   const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0 });
   mat.defines = {}; // prevent caching collision
 
+  // 낙엽 마스크 유니폼(나무 배치 후 buildWorld가 .value를 채움). 초기엔 검은(=낙엽 없음) 1x1.
+  const blank = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat);
+  blank.needsUpdate = true;
+  const leafMask = { value: blank };
+
   // GLSL 주입: 월드 좌표 기반 노이즈로 3가지 텍스처 블렌딩
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.tGrass  = { value: tGrass  };
     shader.uniforms.tDirt   = { value: tDirt   };
     shader.uniforms.tLeaves = { value: tLeaves };
+    shader.uniforms.tLeafMask = leafMask;
 
     // vertex: 월드 위치 varying 추가
     shader.vertexShader = shader.vertexShader
@@ -214,6 +256,7 @@ export function createGround(scene) {
 uniform sampler2D tGrass;
 uniform sampler2D tDirt;
 uniform sampler2D tLeaves;
+uniform sampler2D tLeafMask;
 varying vec3 vWP;
 // value noise (hash + bilinear)
 float gh(float x,float y){return fract(sin(x*127.1+y*311.7)*43758.5);}
@@ -235,22 +278,25 @@ vec4 cG = texture2D(tGrass,  wp*0.065);
 vec4 cD = texture2D(tDirt,   wp*0.060);
 vec4 cL = texture2D(tLeaves, wp*0.055);
 
-// 잔디가 기본 80%+, 흙/낙엽은 패치로만 등장
+// 잔디가 기본, 흙은 노이즈 패치. 낙엽은 '나무 아래' 마스크 영역에만.
 float wDirt   = smoothstep(0.62, 0.80, nd) * (0.5+nd2*0.5);   // 흙: 상위 20%만
-float wLeaves = smoothstep(0.66, 0.82, nl) * (1.0-wDirt*0.8); // 낙엽: 상위 18%만
-vec3 blended = mix(mix(cG.rgb, cD.rgb, clamp(wDirt,0.,1.)), cL.rgb, clamp(wLeaves,0.,0.7));
+float leafMaskV = texture2D(tLeafMask, (wp + ${GROUND_HALF.toFixed(1)}) / ${GROUND_SIZE.toFixed(1)}).r;
+// 마스크 영역 안에서만, 노이즈로 자연스러운 농담을 줘 낙엽 분포
+float wLeaves = leafMaskV * (0.55 + 0.45 * nl) * (1.0 - wDirt*0.8);
+vec3 blended = mix(mix(cG.rgb, cD.rgb, clamp(wDirt,0.,1.)), cL.rgb, clamp(wLeaves,0.,0.85));
 vec4 diffuseColor = vec4(blended, opacity);`);
   };
 
   const m = new THREE.Mesh(geo, mat);
   m.rotation.x = -Math.PI / 2; m.receiveShadow = true;
   scene.add(m);
-  return m;
+  return { mesh: m, leafMask };
 }
 
 // ─── 메인 buildWorld ────────────────────────────────────────────────────
 export async function buildWorld(scene, { area = 95 } = {}) {
-  createGround(scene);
+  const { leafMask } = createGround(scene);
+  const treePos = [];   // 낙엽 마스크용 나무 위치 수집
 
   // 텍스처 미리 생성
   const tb = T.treeBark(), tl = T.treeLeaves();
@@ -338,31 +384,31 @@ export async function buildWorld(scene, { area = 95 } = {}) {
   applyTex(deadTree2, [{ match:['bark','wood','dead','trunk'], map:T.treeBark() }]);
 
   // ── 나무 배치 (수량 최적화: draw call 절감) ────────────────────────────
-  // 텍스처 나무 (다채로운 색)
-  scatter(scene, tree1,  12, { area, inner:18, scaleVar:0.25 });
-  scatter(scene, tree2,  10, { area, inner:18, scaleVar:0.3  });
-  scatter(scene, tree3,   9, { area, inner:20, scaleVar:0.3  });
-  scatter(scene, tree4,   9, { area, inner:18, scaleVar:0.25 });
-  scatter(scene, birch1, 10, { area, inner:18, scaleVar:0.25 });
-  scatter(scene, birch2, 10, { area, inner:20, scaleVar:0.3  });
-  scatter(scene, birch3,  8, { area, inner:22, scaleVar:0.25 });
-  scatter(scene, pine1,  10, { area, inner:18, scaleVar:0.2  });
-  scatter(scene, pine2,  10, { area, inner:18, scaleVar:0.2  });
-  scatter(scene, deadTree1, 5, { area, inner:20, scaleVar:0.35 });
-  scatter(scene, deadTree2, 4, { area, inner:22, scaleVar:0.35 });
+  // 텍스처 나무 (다채로운 색). 활엽수는 낙엽 반경 크게, 침엽수는 작게.
+  scatter(scene, tree1,  12, { area, inner:18, scaleVar:0.25, record:treePos, leafRadius:4.5 });
+  scatter(scene, tree2,  10, { area, inner:18, scaleVar:0.3,  record:treePos, leafRadius:4.5 });
+  scatter(scene, tree3,   9, { area, inner:20, scaleVar:0.3,  record:treePos, leafRadius:4.5 });
+  scatter(scene, tree4,   9, { area, inner:18, scaleVar:0.25, record:treePos, leafRadius:4.5 });
+  scatter(scene, birch1, 10, { area, inner:18, scaleVar:0.25, record:treePos, leafRadius:4 });
+  scatter(scene, birch2, 10, { area, inner:20, scaleVar:0.3,  record:treePos, leafRadius:4 });
+  scatter(scene, birch3,  8, { area, inner:22, scaleVar:0.25, record:treePos, leafRadius:4 });
+  scatter(scene, pine1,  10, { area, inner:18, scaleVar:0.2,  record:treePos, leafRadius:3 });
+  scatter(scene, pine2,  10, { area, inner:18, scaleVar:0.2,  record:treePos, leafRadius:3 });
+  scatter(scene, deadTree1, 5, { area, inner:20, scaleVar:0.35, record:treePos, leafRadius:3.5 });
+  scatter(scene, deadTree2, 4, { area, inner:22, scaleVar:0.35, record:treePos, leafRadius:3.5 });
 
   // nature 나무
-  scatter(scene, pineN1,       10, { area, inner:18, scaleVar:0.2 });
-  scatter(scene, pineN2,       10, { area, inner:18, scaleVar:0.2 });
-  scatter(scene, pineNAutumn,   8, { area, inner:20, scaleVar:0.25 });
-  scatter(scene, commonTree,   10, { area, inner:18, scaleVar:0.3 });
-  scatter(scene, commonAutumn,  8, { area, inner:20, scaleVar:0.3 });
-  scatter(scene, commonDead,    5, { area, inner:22, scaleVar:0.35 });
-  scatter(scene, willowGreen,   8, { area, inner:20, scaleVar:0.3 });
-  scatter(scene, willowAutumn,  7, { area, inner:22, scaleVar:0.3 });
-  scatter(scene, willowDead,    5, { area, inner:24, scaleVar:0.35 });
-  scatter(scene, birchN,        8, { area, inner:18, scaleVar:0.25 });
-  scatter(scene, birchNAutumn,  7, { area, inner:20, scaleVar:0.25 });
+  scatter(scene, pineN1,       10, { area, inner:18, scaleVar:0.2,  record:treePos, leafRadius:3 });
+  scatter(scene, pineN2,       10, { area, inner:18, scaleVar:0.2,  record:treePos, leafRadius:3 });
+  scatter(scene, pineNAutumn,   8, { area, inner:20, scaleVar:0.25, record:treePos, leafRadius:3.5 });
+  scatter(scene, commonTree,   10, { area, inner:18, scaleVar:0.3,  record:treePos, leafRadius:4.5 });
+  scatter(scene, commonAutumn,  8, { area, inner:20, scaleVar:0.3,  record:treePos, leafRadius:5 });
+  scatter(scene, commonDead,    5, { area, inner:22, scaleVar:0.35, record:treePos, leafRadius:3.5 });
+  scatter(scene, willowGreen,   8, { area, inner:20, scaleVar:0.3,  record:treePos, leafRadius:5.5 });
+  scatter(scene, willowAutumn,  7, { area, inner:22, scaleVar:0.3,  record:treePos, leafRadius:6 });
+  scatter(scene, willowDead,    5, { area, inner:24, scaleVar:0.35, record:treePos, leafRadius:4.5 });
+  scatter(scene, birchN,        8, { area, inner:18, scaleVar:0.25, record:treePos, leafRadius:4 });
+  scatter(scene, birchNAutumn,  7, { area, inner:20, scaleVar:0.25, record:treePos, leafRadius:4.5 });
 
   // ── 바위 ───────────────────────────────────────────────────────────────
   scatterMixed(scene, [rock1, rock2, rock3],    14, { area, inner:12, scaleVar:0.55 });
@@ -381,5 +427,8 @@ export async function buildWorld(scene, { area = 95 } = {}) {
   scatterInstanced(scene, grass,      1000, area);
   scatterInstanced(scene, grassShort,  600, area);
 
-  console.log('[world] built');
+  // ── 낙엽 마스크: 수집한 나무 위치로 생성 → 지형 셰이더에 주입 ──────────────
+  leafMask.value = buildLeafMask(treePos);
+
+  console.log('[world] built — trees:', treePos.length);
 }

@@ -29,6 +29,8 @@ export class Player {
     this.cameraDistance = 8;
     this.turnSpeed = 10;    // 캐릭터 회전 보간 속도(클수록 빠르게 돌아봄)
     this.groundOffset = 0;  // 발이 모델 원점(y=0)에 정렬되므로 0
+    this.firstPerson = false; // V키로 1·3인칭 전환
+    this.eyeHeight = 1.6;     // 1인칭 눈높이(m)
 
     // 애니메이션
     this.mixer = null;
@@ -43,13 +45,11 @@ export class Player {
   _loadModel() {
     loader.load(PLAYER_PATH, (gltf) => {
       const model = gltf.scene;
-      // 키 정규화 + 발을 y=0에 정렬
+      // 키 정규화 (스킨드 메시는 setFromObject가 부정확하므로 본 스팬으로 보정)
       const box = new THREE.Box3().setFromObject(model);
       const size = new THREE.Vector3();
       box.getSize(size);
       model.scale.setScalar(TARGET_HEIGHT / (size.y || 1));
-      const box2 = new THREE.Box3().setFromObject(model);
-      model.position.y -= box2.min.y;
       model.rotation.y = FACE_FIX;
 
       model.traverse((c) => {
@@ -72,9 +72,28 @@ export class Player {
       }
 
       this._setAction('idle', 0);
+      this.mixer.update(0);   // idle 자세로 1회 포즈 후 발 정렬
+      this._alignFeet();
     }, undefined, (err) => {
       console.error('[player] GLB 로드 실패:', err);
     });
+  }
+
+  // 스켈레톤 본 기준으로 가장 낮은 발 본을 mesh 로컬 y=0(=지면)에 맞춤.
+  // 스킨드 glb는 원점이 엉덩이라 setFromObject로는 발 위치를 못 잡음.
+  _alignFeet() {
+    if (!this.model) return;
+    this.mesh.updateWorldMatrix(true, true);
+    const wp = new THREE.Vector3();
+    let minY = Infinity;
+    this.model.traverse((c) => {
+      if (c.isBone) {
+        c.getWorldPosition(wp);
+        this.mesh.worldToLocal(wp);
+        if (wp.y < minY) minY = wp.y;
+      }
+    });
+    if (Number.isFinite(minY)) this.model.position.y -= minY;
   }
 
   _setAction(kind, fade = 0.2) {
@@ -86,7 +105,10 @@ export class Player {
   }
 
   _initInput() {
-    window.addEventListener('keydown', (e) => (this.keys[e.code] = true));
+    window.addEventListener('keydown', (e) => {
+      this.keys[e.code] = true;
+      if (e.code === 'KeyV') this.toggleView();
+    });
     window.addEventListener('keyup', (e) => (this.keys[e.code] = false));
 
     const canvas = document.getElementById('app');
@@ -154,7 +176,15 @@ export class Player {
     this._updateCamera(camera);
   }
 
+  // V: 1·3인칭 전환. 1인칭에선 캐릭터 모델을 숨겨 머리 안이 보이지 않게.
+  toggleView() {
+    this.firstPerson = !this.firstPerson;
+    if (this.model) this.model.visible = !this.firstPerson;
+  }
+
   _updateCamera(camera) {
+    if (this.firstPerson) return this._updateCameraFP(camera);
+
     const dist = this.cameraDistance;
     const height = dist * 0.35;
     const offset = new THREE.Vector3(
@@ -169,6 +199,22 @@ export class Player {
       this.mesh.position.y + 1.5,
       this.mesh.position.z
     );
+  }
+
+  // 1인칭: 눈높이에서 yaw/pitch 방향을 바라봄 (위치는 즉시 추적, 흔들림 없음)
+  _updateCameraFP(camera) {
+    const eye = this.mesh.position.clone();
+    eye.y += this.eyeHeight;
+    camera.position.copy(eye);
+    // cameraPitch 0.3 = 정면. 마우스 아래로 → 아래를 봄.
+    const lp = this.cameraPitch - 0.3;
+    const cp = Math.cos(lp);
+    const dir = new THREE.Vector3(
+      -Math.sin(this.yaw) * cp,
+      -Math.sin(lp),
+      -Math.cos(this.yaw) * cp
+    );
+    camera.lookAt(eye.add(dir));
   }
 }
 
