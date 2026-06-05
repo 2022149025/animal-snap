@@ -2,3 +2,6 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# 원본 플레이어 FBX(60MB) — 런타임은 최적화된 Player.glb만 사용하므로 배포 제외
+public/assets/player/player.fbx

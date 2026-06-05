@@ -35,6 +35,10 @@ export class IntroCinematic {
     this._streaks = [];
     this._tmp = new THREE.Vector3();
 
+    // 인트로 동안 게임 조작 HUD 숨김 (레터박스에 겹쳐 보이는 문제 방지)
+    this._hud = document.getElementById('hud');
+    if (this._hud) this._hud.style.display = 'none';
+
     // 분위기용 옅은 종말 기운(자막 진행에 맞춰 약간 붉게) — 시작 시 초기화됨
     if (doomsday) doomsday.elapsed = doomsday.duration * 0.05;
 
@@ -222,6 +226,9 @@ export class IntroCinematic {
       this._flashEl.style.opacity = '0';
     });
     setTimeout(() => { this._overlay && this._overlay.remove(); }, 650);
+
+    // 게임 HUD 복원
+    if (this._hud) this._hud.style.display = '';
 
     // 씬 정리
     this.scene.remove(this._group);
