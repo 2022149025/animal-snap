@@ -148,10 +148,11 @@ export class MeteorStrikes {
   }
 
   update(dt) {
-    if (!this.doomsday.running) return; // 인트로 중에는 비활성
-
-    this.timer -= dt;
-    if (this.timer <= 0) { this._spawnMeteor(); this.timer = this._nextInterval(); }
+    // 새 운석 스폰은 카운트다운 중에만 (인트로/엔딩 시 정지). 진행 중 연출은 계속 갱신.
+    if (this.doomsday.running) {
+      this.timer -= dt;
+      if (this.timer <= 0) { this._spawnMeteor(); this.timer = this._nextInterval(); }
+    }
 
     for (let i = this._falling.length - 1; i >= 0; i--) {
       const m = this._falling[i];
@@ -177,6 +178,27 @@ export class MeteorStrikes {
     this._light.intensity *= Math.pow(0.05, dt);
     this._flashV *= Math.pow(0.02, dt);
     this._flash.style.opacity = String(this._flashV);
+  }
+
+  // 최후의 일격 — D-0 대형 운석 충돌 (엔딩 연출)
+  finalStrike(pos) {
+    const impact = new THREE.Vector3(pos.x, this.getHeight(pos.x, pos.z), pos.z);
+    // 큰 크레이터
+    const size = 16;
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({ map: this._scorchTex, transparent: true, depthWrite: false, opacity: 0.96 }));
+    decal.rotation.x = -Math.PI / 2; decal.position.set(impact.x, impact.y + 0.06, impact.z);
+    this.scene.add(decal); this._scorches.push(decal);
+    this._light.position.set(impact.x, impact.y + 8, impact.z); this._light.intensity = 400;
+    this.trauma = 1.6; this._flashV = 1;
+    // 광범위 사망
+    const agents = this.animalMgr.agents;
+    for (let i = agents.length - 1; i >= 0; i--) {
+      if (agents[i].obj.position.distanceTo(impact) <= 40) {
+        this._deathPoof(agents[i].obj.position);
+        this.scene.remove(agents[i].obj); agents.splice(i, 1); this.lostCount++;
+      }
+    }
   }
 
   // 카메라에 흔들림 적용 (player.update 이후 호출)

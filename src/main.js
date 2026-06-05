@@ -9,6 +9,7 @@ import { Flashlight } from './flashlight.js';
 import { createSettingsPanel } from './settings.js';
 import { IntroCinematic } from './intro3d.js';
 import { MeteorStrikes } from './meteors.js';
+import { showEnding } from './ending.js';
 
 const canvas = document.getElementById('app');
 const { scene, camera, renderer, sun, hemi } = createScene(canvas);
@@ -47,6 +48,21 @@ const meteors = new MeteorStrikes(scene, camera, animalMgr, doomsday, getTerrain
 const intro = new IntroCinematic(scene, camera, doomsday);
 let introActive = true;
 intro.onDone = () => { introActive = false; };
+
+// 엔딩 — D-0 충돌 시 대형 최종 운석 + 화이트아웃 → 결과 화면
+let ended = false;
+doomsday.onImpact = () => {
+  if (ended) return;
+  ended = true;
+  // 최후의 일격: 플레이어 발치에 대형 운석 + 강한 흔들림
+  meteors.finalStrike(player.mesh.position);
+  setTimeout(() => {
+    showEnding(
+      { capturedMap: ui.captured, total: ui.total, lost: meteors.lostCount },
+      () => location.reload()
+    );
+  }, 1100);
+};
 
 // 디버그 핸들 (개발용)
 window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, doomsday, flashlight, intro, meteors };
