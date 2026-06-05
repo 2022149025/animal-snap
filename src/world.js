@@ -6,15 +6,31 @@ const fbxLoader = new FBXLoader();
 const gltfLoader = new GLTFLoader();
 const texLoader = new THREE.TextureLoader();
 
-// ─── 지형 높이 함수 ────────────────────────────────────────────────────
+// ─── 연못(물가) 설정 ───────────────────────────────────────────────────
+export const POND = { x: 44, z: -24, r: 15, rim: 9, waterY: -1.2, floor: -4.2, lip: -0.4 };
+export function inPond(x, z, margin = 0) {
+  return Math.hypot(x - POND.x, z - POND.z) < POND.r + margin;
+}
+
+// ─── 지형 높이 함수 (연못 분지 포함) ──────────────────────────────────────
 function _h(wx, wz) {
   const d = THREE.MathUtils.clamp(Math.hypot(wx, wz) / 22, 0, 1);
-  return (
+  let h = (
     Math.sin(wx * 0.04)       * Math.cos(wz * 0.05)       * 5.0 +
     Math.sin(wx * 0.09 + 1.2) * Math.cos(wz * 0.07 + 0.8) * 2.5 +
     Math.sin(wx * 0.18 + 3.0) * Math.sin(wz * 0.16 + 1.4) * 1.2 +
     Math.sin(wx * 0.31 + 0.5) * Math.cos(wz * 0.28 + 2.1) * 0.6
   ) * d;
+  // 연못: 중심은 바닥(floor)까지 패고, 가장자리는 둑(lip)을 만들어 물을 가둠
+  const pd = Math.hypot(wx - POND.x, wz - POND.z);
+  if (pd < POND.r) {
+    const t = pd / POND.r;                 // 0 중심 → 1 가장자리
+    h = POND.floor + (POND.lip - POND.floor) * (t * t);
+  } else if (pd < POND.r + POND.rim) {
+    const k = (pd - POND.r) / POND.rim;    // 0..1
+    h = POND.lip + (h - POND.lip) * (k * k * (3 - 2 * k));
+  }
+  return h;
 }
 export const getTerrainHeight = _h;
 
@@ -105,9 +121,12 @@ function applyTex(obj, rules) {
 function scatter(scene, proto, count, { area = 90, inner = 16, scaleVar = 0.3, record = null, leafRadius = 4 } = {}) {
   for (let i = 0; i < count; i++) {
     const o = proto.clone();
-    const angle = Math.random() * Math.PI * 2;
-    const r = inner + Math.random() * (area - inner);
-    const wx = Math.cos(angle) * r, wz = Math.sin(angle) * r;
+    let wx, wz, tries = 0;
+    do {
+      const angle = Math.random() * Math.PI * 2;
+      const r = inner + Math.random() * (area - inner);
+      wx = Math.cos(angle) * r; wz = Math.sin(angle) * r;
+    } while (inPond(wx, wz, 3) && ++tries < 10); // 연못 안에는 배치 금지
     o.position.set(wx, _h(wx, wz), wz);
     o.rotation.y = Math.random() * Math.PI * 2;
     const sf = 1 + (Math.random() - 0.5) * 2 * scaleVar;
@@ -133,9 +152,12 @@ function scatterInstanced(scene, proto, count, area = 95) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
   const ws = proto.scale.x;
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const r = 4 + Math.random() * area;
-    const gx = Math.cos(angle) * r, gz = Math.sin(angle) * r;
+    let gx, gz, tries = 0;
+    do {
+      const angle = Math.random() * Math.PI * 2;
+      const r = 4 + Math.random() * area;
+      gx = Math.cos(angle) * r; gz = Math.sin(angle) * r;
+    } while (inPond(gx, gz, 2) && ++tries < 8);
     p.set(gx, _h(gx, gz), gz);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * Math.PI * 2);
     s.setScalar(ws * (0.7 + Math.random() * 0.6));
@@ -316,9 +338,25 @@ vec4 diffuseColor = vec4(blended, opacity);`);
   return { mesh: m, leafMask };
 }
 
+// ─── 연못 물 표면 (반투명) ───────────────────────────────────────────────
+function createWater(scene) {
+  const geo = new THREE.CircleGeometry(POND.r + 1.2, 56);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x2e6f8c, transparent: true, opacity: 0.72,
+    roughness: 0.15, metalness: 0.2, depthWrite: false,
+  });
+  const water = new THREE.Mesh(geo, mat);
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(POND.x, POND.waterY, POND.z);
+  water.renderOrder = 1;
+  scene.add(water);
+  return water;
+}
+
 // ─── 메인 buildWorld ────────────────────────────────────────────────────
 export async function buildWorld(scene, { area = 95 } = {}) {
   const { leafMask } = createGround(scene);
+  createWater(scene);
   const treePos = [];   // 낙엽 마스크용 나무 위치 수집
 
   // 지형지물 크기 배수 (지형감 강조 — 값만 바꿔 일괄 조정)

@@ -26,12 +26,15 @@ animalMgr.spawn(
     Cow: 2, Horse: 2, Zebra: 2, Pig: 2, Sheep: 2, Rat: 2, Frog: 2, Spider: 2, Trex: 1, Triceratops: 1,
     // 추가 동물
     Deer: 3, Stag: 2, Fox: 3, Wolf: 2, Alpaca: 2, Bull: 2, Donkey: 2, Husky: 2, ShibaInu: 2,
+    // 물고기 (연못)
+    Clownfish: 3, Koi: 2, BlueTang: 3, Puffer: 2, Goldfish: 3,
   },
   { bounds: 90, getHeight: getTerrainHeight }
 ).then((agents) => console.log('[spawn] total animals:', agents.length));
 
 // UI + 카메라(촬영) 모드
 const ui = new UI();
+animalMgr.ui = ui;   // 미촬영 동물 발광 토글용
 const cameraMode = new CameraMode(camera, renderer, animalMgr, ui, player);
 
 // 종말 진행(붉어지는 하늘 + 카운트다운) + 손전등

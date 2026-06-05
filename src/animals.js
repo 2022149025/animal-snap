@@ -41,6 +41,13 @@ export const ANIMAL_DEFS = {
   Donkey:      { path: 'assets/animals/glTF/Donkey.gltf',    name: '당나귀',   h: 1.6, faceFix: 0, timid: 0.5,  desc: '온순하고 끈기 있는 일꾼.' },
   Husky:       { path: 'assets/animals/glTF/Husky.gltf',     name: '허스키',   h: 0.9, faceFix: 0, timid: 0.4,  desc: '눈을 좋아하는 썰매견.' },
   ShibaInu:    { path: 'assets/animals/glTF/ShibaInu.gltf',  name: '시바견',   h: 0.7, faceFix: 0, timid: 0.45, desc: '동글동글 귀여운 강아지.' },
+
+  // 물고기 (연못에서 헤엄침 — Swimming 애니메이션 내장 FBX)
+  Clownfish:   { path: 'assets/fishes/FBX/Clownfish.fbx',  name: '흰동가리', h: 0.45, faceFix: 0, timid: 0.7, aquatic: true, desc: '주황 줄무늬의 산호초 물고기.' },
+  Koi:         { path: 'assets/fishes/FBX/Koi.fbx',        name: '비단잉어', h: 0.7,  faceFix: 0, timid: 0.6, aquatic: true, desc: '연못을 우아하게 도는 잉어.' },
+  BlueTang:    { path: 'assets/fishes/FBX/BlueTang.fbx',   name: '블루탱',   h: 0.5,  faceFix: 0, timid: 0.7, aquatic: true, desc: '선명한 파란빛 열대어.' },
+  Puffer:      { path: 'assets/fishes/FBX/Puffer.fbx',     name: '복어',     h: 0.5,  faceFix: 0, timid: 0.6, aquatic: true, desc: '부풀어 오르는 동그란 물고기.' },
+  Goldfish:    { path: 'assets/fishes/FBX/Goldfish.fbx',   name: '금붕어',   h: 0.4,  faceFix: 0, timid: 0.65, aquatic: true, desc: '반짝이는 금빛 물고기.' },
 };
 
 // 클립 이름 → 동작 키워드
@@ -77,6 +84,21 @@ export function loadSpecies(key) {
   return speciesCache[key];
 }
 
+// 발광용 부드러운 원형 텍스처 (1회 생성)
+let _glowTex = null;
+function glowTexture() {
+  if (_glowTex) return _glowTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.4, 'rgba(170,225,255,0.55)');
+  g.addColorStop(1, 'rgba(120,200,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+  _glowTex = new THREE.CanvasTexture(c);
+  return _glowTex;
+}
+
 // 종 프로토타입을 복제해 독립 애니 믹서를 가진 인스턴스 생성
 export class Animal {
   constructor(species) {
@@ -89,6 +111,16 @@ export class Animal {
         c.frustumCulled = false;
       }
     });
+
+    // 아직 촬영하지 않은(도감에 없는) 동물 표시용 발광 오라
+    const hh = this.def.h || 1;
+    this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTexture(), color: 0xaee4ff, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9,
+    }));
+    this.glow.scale.set(hh * 2.6, hh * 2.6, 1);
+    this.glow.position.y = hh * 0.55;
+    this.object.add(this.glow);
 
     this.mixer = new THREE.AnimationMixer(this.object);
     this.actions = {};

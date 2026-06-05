@@ -107,7 +107,6 @@ export class Player {
   _initInput() {
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
-      if (e.code === 'KeyV') this.toggleView();
     });
     window.addEventListener('keyup', (e) => (this.keys[e.code] = false));
 
