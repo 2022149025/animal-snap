@@ -112,14 +112,19 @@ export class Animal {
       }
     });
 
-    // 아직 촬영하지 않은(도감에 없는) 동물 표시용 발광 오라
+    // 아직 촬영하지 않은(도감에 없는) 동물 표시용 발광 오라.
+    // object가 정규화 스케일(def.h/size.y)을 가지므로, 자식 스프라이트는 그 스케일에
+    // 곱해져 작아진다 → 모델 단위가 큰 FBX(소·티라노 등)는 발광이 사라짐.
+    // 스케일을 나눠 상쇄해 항상 일정한 '월드 크기'가 되도록 한다.
     const hh = this.def.h || 1;
+    const sca = this.object.scale.x || 1;
+    const gw = (hh * 2.6) / sca;
     this.glow = new THREE.Sprite(new THREE.SpriteMaterial({
       map: glowTexture(), color: 0xaee4ff, transparent: true,
       blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.9,
     }));
-    this.glow.scale.set(hh * 2.6, hh * 2.6, 1);
-    this.glow.position.y = hh * 0.55;
+    this.glow.scale.set(gw, gw, 1);
+    this.glow.position.y = (hh * 0.6) / sca;
     this.object.add(this.glow);
 
     this.mixer = new THREE.AnimationMixer(this.object);
