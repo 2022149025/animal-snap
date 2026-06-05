@@ -9,6 +9,7 @@ import { Flashlight } from './flashlight.js';
 import { createSettingsPanel } from './settings.js';
 import { IntroCinematic } from './intro3d.js';
 import { MeteorStrikes } from './meteors.js';
+import { Minimap } from './minimap.js';
 import { showEnding } from './ending.js';
 
 const canvas = document.getElementById('app');
@@ -35,6 +36,7 @@ animalMgr.spawn(
 // UI + 카메라(촬영) 모드
 const ui = new UI();
 animalMgr.ui = ui;   // 미촬영 동물 발광 토글용
+ui.animalMgr = animalMgr;   // 도감 생존 수 표시용
 const cameraMode = new CameraMode(camera, renderer, animalMgr, ui, player);
 
 // 종말 진행(붉어지는 하늘 + 카운트다운) + 손전등
@@ -47,25 +49,32 @@ createSettingsPanel(player, doomsday, cameraMode);
 // 게임 중 운석 낙하(흔들림·크레이터·생명체 사망) — 종말 카운트다운 중에만 활성
 const meteors = new MeteorStrikes(scene, camera, animalMgr, doomsday, getTerrainHeight, ui, player);
 
+// 미니맵 (플레이어·미촬영 종·운석 경고·경계)
+const minimap = new Minimap(player, animalMgr, meteors, ui, { radius: player.bound });
+
 // 3D 시네마틱 인트로 (게임 씬 위에서 카메라 연출 + 운석). 종료 시 게임플레이 시작.
 const intro = new IntroCinematic(scene, camera, doomsday);
 let introActive = true;
 intro.onDone = () => { introActive = false; };
 
-// 엔딩 — D-0 충돌 시 대형 최종 운석 + 화이트아웃 → 결과 화면
+// 엔딩 — D-0 충돌(impact) 또는 운석 직격으로 인한 즉사(caught)
 let ended = false;
-doomsday.onImpact = () => {
+function endGame(cause) {
   if (ended) return;
   ended = true;
-  // 최후의 일격: 플레이어 발치에 대형 운석 + 강한 흔들림
-  meteors.finalStrike(player.mesh.position);
+  doomsday.running = false;        // 카운트다운/운석 스폰 정지
+  const delay = cause === 'caught' ? 900 : 1100;
   setTimeout(() => {
     showEnding(
-      { capturedMap: ui.captured, total: ui.total, lost: meteors.lostCount },
+      { capturedMap: ui.captured, total: ui.total, lost: meteors.lostCount, cause },
       () => location.reload()
     );
-  }, 1100);
-};
+  }, delay);
+}
+// D-0 도달: 최후의 대형 운석 + 화이트아웃
+doomsday.onImpact = () => { meteors.finalStrike(player.mesh.position); endGame('impact'); };
+// 플레이어가 운석에 휩쓸림: 즉사 → 조기 종료
+meteors.onPlayerKilled = () => { player.kill(); endGame('caught'); };
 
 // 디버그 핸들 (개발용)
 window.__game = { scene, camera, renderer, player, animalMgr, ui, cameraMode, doomsday, flashlight, intro, meteors };
@@ -79,13 +88,26 @@ function animate(now) {
     intro.update(dt);
     animalMgr.update(dt, player.mesh.position, getTerrainHeight);
     doomsday.update(dt);
+  } else if (!ended) {
+    // 포인터 잠금이 풀리면(Esc 등) 일시정지 — 화면 클릭 시 다시 잠그며 계속
+    if (document.pointerLockElement) {
+      ui.setPaused(false);
+      player.update(dt, camera, getTerrainHeight);
+      animalMgr.update(dt, player.mesh.position, getTerrainHeight);
+      cameraMode.update(dt);
+      doomsday.update(dt);
+      meteors.update(dt);
+      meteors.applyShake(camera);   // player.update 이후 카메라에 흔들림 적용
+      // 촬영(카메라) 모드 중에는 미니맵 숨김 (몰입)
+      if (cameraMode.active) minimap.setHidden(true);
+      else { minimap.setHidden(false); minimap.update(); }
+    } else {
+      ui.setPaused(true);
+    }
   } else {
-    player.update(dt, camera, getTerrainHeight);
-    animalMgr.update(dt, player.mesh.position, getTerrainHeight);
-    cameraMode.update(dt);
-    doomsday.update(dt);
+    // 종료 연출: 운석/흔들림 잔향만 계속 감쇠
     meteors.update(dt);
-    meteors.applyShake(camera);   // player.update 이후 카메라에 흔들림 적용
+    meteors.applyShake(camera);
   }
   flashlight.update(doomsday.dayFactor);
   renderer.render(scene, camera);

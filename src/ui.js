@@ -5,6 +5,7 @@ export class UI {
   constructor() {
     this.captured = {};        // key -> { photo, def }
     this.total = Object.keys(ANIMAL_DEFS).length;
+    this.animalMgr = null;     // main에서 주입 (도감 생존 수 표시용)
     this._build();
   }
 
@@ -124,6 +125,20 @@ export class UI {
       #dex .card .nm { padding:8px 4px; font-size:14px; }
       #dex .card .ds { padding:0 6px 10px; font-size:11px; color:#bcd; min-height:28px; }
       #dex .hint { margin-top:18px; color:#9ab; font-size:13px; }
+      /* 종별 생존 수 / 상태 */
+      #dex .card.danger { box-shadow: inset 0 0 0 2px rgba(255,180,0,.85); }
+      #dex .card.lost { opacity:.5; filter:grayscale(.7); }
+      #dex .card .rem { padding:2px 4px 0; font-size:11px; color:#bcd; }
+      #dex .card .rem.warn { color:#ffc24a; font-weight:bold; }
+      #dex .card .rem.gone { color:#e0623f; font-weight:bold; }
+      #dex .card .ds .ext { display:block; margin-top:3px; font-size:10px; color:#d9a06a; font-style:italic; }
+      /* 일시정지 오버레이 */
+      #pause { position:fixed; inset:0; z-index:25; display:none; pointer-events:none;
+        background:rgba(8,12,16,.55); color:#fff; flex-direction:column;
+        align-items:center; justify-content:center; text-align:center; font-family:sans-serif; }
+      #pause.on { display:flex; }
+      #pause h2 { font-size:30px; margin-bottom:8px; letter-spacing:.04em; }
+      #pause p { color:#cdd; font-size:15px; }
     `;
     document.head.appendChild(style);
 
@@ -151,7 +166,10 @@ export class UI {
     this.score = el('div', { id: 'score' });
     this.toast = el('div', { id: 'toast' });
     this.dex = el('div', { id: 'dex' });
-    document.body.append(this.crosshair, this.flash, this.score, this.toast, this.dex);
+    this.pause = el('div', { id: 'pause' },
+      el('h2', {}, '⏸ 일시정지'),
+      el('p', {}, '화면을 클릭하면 계속합니다'));
+    document.body.append(this.crosshair, this.flash, this.score, this.toast, this.dex, this.pause);
 
     this._updateScore();
     this._buildDex();
@@ -159,10 +177,19 @@ export class UI {
 
   setCameraMode(on) { this.crosshair.classList.toggle('on', on); }
 
+  setPaused(on) { this.pause.classList.toggle('on', on); }
+
   _updateScore() {
     const n = Object.keys(this.captured).length;
-    this.score.textContent = `📷 도감 ${n} / ${this.total}`;
-    if (n === this.total && !this._won) { this._won = true; this.showToast('🏆 도감 완성! 모든 동물을 찍었어요!'); }
+    let lost = 0;
+    if (this.animalMgr) {
+      const counts = this.animalMgr.countsBySpecies();
+      for (const key of Object.keys(ANIMAL_DEFS)) {
+        if (!this.captured[key] && this.animalMgr.spawnCounts[key] > 0 && !(counts[key] > 0)) lost++;
+      }
+    }
+    this.score.innerHTML = `📷 도감 ${n} / ${this.total}` + (lost ? ` <span style="color:#e0623f">· 소실 ${lost}</span>` : '');
+    if (n === this.total && !this._won) { this._won = true; this.showToast('🏆 도감 완성! 모든 생명을 기록했어요!'); }
   }
 
   isCaptured(key) { return !!this.captured[key]; }
@@ -190,22 +217,53 @@ export class UI {
     this._toastT = setTimeout(() => this.toast.classList.remove('on'), 1600);
   }
 
-  toggleDex() { this.dex.classList.toggle('on'); }
+  toggleDex() {
+    const opening = !this.dex.classList.contains('on');
+    if (opening) this._buildDex();   // 열 때마다 최신 생존 수 반영
+    this.dex.classList.toggle('on');
+  }
 
   _buildDex() {
     const n = Object.keys(this.captured).length;
+    const counts = this.animalMgr ? this.animalMgr.countsBySpecies() : null;
+    const spawn = this.animalMgr ? this.animalMgr.spawnCounts : null;
     const cards = Object.entries(ANIMAL_DEFS).map(([key, def]) => {
       const got = this.captured[key];
+      const alive = counts ? (counts[key] || 0) : null;
+      const born = spawn ? (spawn[key] || 0) : null;
+
+      const lost = !got && alive === 0 && born > 0;            // 못 찍고 절멸 → 소실
+      const endangered = !got && alive !== null && alive === 1; // 마지막 한 마리
+      const wildExtinct = got && alive === 0;                  // 기록은 남았으나 야생 절멸
+
       const media = got
         ? `<img src="${got.photo}" alt="${def.name}">`
-        : `<div class="ph">?</div>`;
-      return `<div class="card">${media}
-        <div class="nm">${got ? def.name : '???'}</div>
-        <div class="ds">${got ? def.desc : '아직 발견하지 못했어요'}</div></div>`;
+        : `<div class="ph">${lost ? '✕' : '?'}</div>`;
+
+      let cls = 'card';
+      if (lost) cls += ' lost'; else if (endangered) cls += ' danger';
+
+      const nm = got ? def.name : (lost ? '소실됨' : '???');
+
+      let ds;
+      if (got) ds = wildExtinct ? `${def.desc}<span class="ext">야생 절멸 · 기록 보존됨</span>` : def.desc;
+      else if (lost) ds = '기록하지 못한 채 영원히 사라졌습니다';
+      else ds = '아직 발견하지 못했어요';
+
+      let badge = '';
+      if (alive !== null) {
+        if (lost || wildExtinct) badge = `<div class="rem gone">남은 개체 0</div>`;
+        else badge = `<div class="rem${endangered ? ' warn' : ''}">남은 개체 ${alive}${born ? ' / ' + born : ''}${endangered ? ' ⚠ 마지막!' : ''}</div>`;
+      }
+
+      return `<div class="${cls}">${media}
+        <div class="nm">${nm}</div>
+        ${badge}
+        <div class="ds">${ds}</div></div>`;
     }).join('');
     this.dex.innerHTML = `<h2>📖 동물 도감 — ${n}/${this.total}</h2>
       <div class="grid">${cards}</div>
-      <div class="hint">Tab: 닫기 · C: 카메라 모드 · 좌클릭: 촬영</div>`;
+      <div class="hint">빛나는 동물을 먼저 · 운석에 쓸려간 종은 영영 기록할 수 없습니다 · Tab: 닫기</div>`;
   }
 }
 

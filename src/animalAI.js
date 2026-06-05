@@ -5,6 +5,10 @@ import { POND } from './world.js';
 const WALK = 2.2;
 const RUN = 7.0;
 
+// 재사용 스크래치 벡터 (동물 수십 마리 × 매 프레임 신규 할당 방지 → GC 부담 감소)
+const _toPlayer = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+
 // 개별 동물의 거동(배회/도주) 상태기계 + 간단 물리
 export class AnimalAgent {
   constructor(animal, opts = {}) {
@@ -28,7 +32,7 @@ export class AnimalAgent {
   update(dt, playerPos) {
     if (this.aquatic) return this._updateFish(dt, playerPos);
     const obj = this.obj;
-    const toPlayer = new THREE.Vector3().subVectors(playerPos, obj.position);
+    const toPlayer = _toPlayer.subVectors(playerPos, obj.position);
     const dist = toPlayer.length();
 
     // --- 상태 전이 ---
@@ -65,7 +69,7 @@ export class AnimalAgent {
     this.speed += (targetSpeed - this.speed) * Math.min(dt * 4, 1);
 
     // 이동
-    const dir = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+    const dir = _dir.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     obj.position.addScaledVector(dir, this.speed * dt);
     // 지형 높이 추적 (getHeight는 manager.update에서 전달)
     obj.position.y = this._groundY ?? 0;
@@ -87,7 +91,7 @@ export class AnimalAgent {
     const obj = this.obj;
     this._t = (this._t || 0) + dt;
 
-    const toPlayer = new THREE.Vector3().subVectors(playerPos, obj.position);
+    const toPlayer = _toPlayer.subVectors(playerPos, obj.position);
     const dist = toPlayer.length();
 
     // 방향: 가끔 살짝 틀기, 플레이어 근접 시 반대로 도주
@@ -101,7 +105,7 @@ export class AnimalAgent {
     if (Math.hypot(px, pz) > POND.r - 2.5) this.heading = Math.atan2(-px, -pz);
 
     this.speed += (targetSpeed - this.speed) * Math.min(dt * 3, 1);
-    const dir = new THREE.Vector3(Math.sin(this.heading), 0, Math.cos(this.heading));
+    const dir = _dir.set(Math.sin(this.heading), 0, Math.cos(this.heading));
     obj.position.addScaledVector(dir, this.speed * dt);
 
     // 연못 밖으로 못 나가게 하드 클램프
@@ -129,12 +133,14 @@ export class AnimalManager {
   constructor(scene) {
     this.scene = scene;
     this.agents = [];
+    this.spawnCounts = {};   // key -> 최초 스폰 수 (도감 '남은/총' 표시용)
   }
 
   // roster: { key: count } — 종마다 count 마리 스폰
   async spawn(roster, { bounds = 70, getHeight = () => 0 } = {}) {
     let id = 0;
     for (const [key, count] of Object.entries(roster)) {
+      this.spawnCounts[key] = count;
       const species = await loadSpecies(key);
       const aquatic = !!(ANIMAL_DEFS[key] && ANIMAL_DEFS[key].aquatic);
       for (let i = 0; i < count; i++) {
@@ -175,5 +181,12 @@ export class AnimalManager {
         if (!captured) a.animal.glow.material.opacity = pulse;
       }
     }
+  }
+
+  // 현재 살아있는 종별 개체 수 { key: n }
+  countsBySpecies() {
+    const m = {};
+    for (const a of this.agents) m[a.key] = (m[a.key] || 0) + 1;
+    return m;
   }
 }

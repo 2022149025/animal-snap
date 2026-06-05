@@ -1,15 +1,30 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 
 // 플레이어: 3인칭 이동 + 마우스 시점(포인터 잠금) + 점프(중력).
 // 시각 모델은 Mixamo 캐릭터(glb, idle/walk/run 애니 내장 + webp 텍스처로 경량화).
 // this.mesh(Group)가 이동/회전/물리를 담당하고, 로드된 모델을 그 자식으로 붙여
 // 다른 모듈(카메라/동물 AI)은 기존 인터페이스 그대로 사용.
-const PLAYER_PATH = 'assets/player/Player.glb';
+// 주인공 모델 경로. .fbx / .glb / .gltf 모두 지원 (확장자로 로더 자동 선택).
+// start.bat이 선택한 Quaternius 캐릭터를 이 파일명으로 public/assets/player/ 에 복사함.
+const PLAYER_PATH = 'assets/player/MainCharacter.fbx';
 const TARGET_HEIGHT = 1.9;   // 모델을 정규화할 키(m)
 const FACE_FIX = 0;          // 모델 정면이 진행방향과 반대면 Math.PI 로 변경
 
-const loader = new GLTFLoader();
+const gltfLoader = new GLTFLoader();
+const fbxLoader = new FBXLoader();
+
+// 확장자에 따라 FBX/glTF 로더 선택 → { scene, animations }
+function loadPlayerModel(path) {
+  return new Promise((resolve, reject) => {
+    if (/\.fbx$/i.test(path)) {
+      fbxLoader.load(path, (o) => resolve({ scene: o, animations: o.animations || [] }), undefined, reject);
+    } else {
+      gltfLoader.load(path, (g) => resolve({ scene: g.scene, animations: g.animations || [] }), undefined, reject);
+    }
+  });
+}
 
 export class Player {
   constructor(scene) {
@@ -31,6 +46,8 @@ export class Player {
     this.groundOffset = 0;  // 발이 모델 원점(y=0)에 정렬되므로 0
     this.firstPerson = false; // V키로 1·3인칭 전환
     this.eyeHeight = 1.6;     // 1인칭 눈높이(m)
+    this.bound = 92;          // 맵 활동 반경 — 이 밖으로는 못 나감
+    this.dead = false;        // 운석에 휩쓸리면 true → 조작 정지
 
     // 애니메이션
     this.mixer = null;
@@ -43,9 +60,8 @@ export class Player {
   }
 
   _loadModel() {
-    loader.load(PLAYER_PATH, (gltf) => {
-      const model = gltf.scene;
-      // 키 정규화 (스킨드 메시는 setFromObject가 부정확하므로 본 스팬으로 보정)
+    loadPlayerModel(PLAYER_PATH).then(({ scene: model, animations }) => {
+      // 키 정규화 (바운딩박스로 목표 키에 맞춤 — FBX의 cm 스케일도 자동 보정)
       const box = new THREE.Box3().setFromObject(model);
       const size = new THREE.Vector3();
       box.getSize(size);
@@ -63,8 +79,8 @@ export class Player {
       this.model = model;
       this.mixer = new THREE.AnimationMixer(model);
 
-      // glb 내장 클립(idle/walk/run) 등록 + Mixamo 전진 모션 제거
-      for (const clip of (gltf.animations || [])) {
+      // 내장 클립(idle/walk/run/jump) 등록 + 전진(루트) 모션 제거
+      for (const clip of (animations || [])) {
         const kind = classifyClip(clip.name);
         if (!kind) continue;
         stripRootMotion(clip);
@@ -74,8 +90,8 @@ export class Player {
       this._setAction('idle', 0);
       this.mixer.update(0);   // idle 자세로 1회 포즈 후 발 정렬
       this._alignFeet();
-    }, undefined, (err) => {
-      console.error('[player] GLB 로드 실패:', err);
+    }).catch((err) => {
+      console.error('[player] 모델 로드 실패:', err);
     });
   }
 
@@ -122,6 +138,7 @@ export class Player {
   }
 
   update(dt, camera, getHeight = () => 0) {
+    if (this.dead) { if (this.mixer) this.mixer.update(dt); this._updateCamera(camera); return; }
     const k = this.keys;
     const running = k['ShiftLeft'] || k['ShiftRight'];
     const spd = running ? this.runSpeed : this.speed;
@@ -163,6 +180,14 @@ export class Player {
       this.onGround = true;
     }
 
+    // 맵 경계: 활동 반경 밖으로 나가지 못하게 클램프
+    const br = Math.hypot(this.mesh.position.x, this.mesh.position.z);
+    if (br > this.bound) {
+      const kb = this.bound / br;
+      this.mesh.position.x *= kb;
+      this.mesh.position.z *= kb;
+    }
+
     // 애니메이션 상태 선택 (클립이 있을 때만)
     if (this.mixer) {
       let kind = 'idle';
@@ -184,6 +209,9 @@ export class Player {
     this.firstPerson = v;
     if (this.model) this.model.visible = !v;
   }
+
+  // 운석에 휩쓸림 — 조작 정지 (main이 엔딩 처리)
+  kill() { this.dead = true; }
 
   _updateCamera(camera) {
     if (this.firstPerson) return this._updateCameraFP(camera);

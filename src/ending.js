@@ -1,11 +1,16 @@
 // 엔딩 — D-0 충돌 후 화이트아웃에서 결과 화면으로.
 // 기록한 종 수 + 사진 갤러리 + 소실된 생명체 수 + 재시작.
 
-export function showEnding({ capturedMap, total, lost }, onRestart) {
+export function showEnding({ capturedMap, total, lost, cause = 'impact' }, onRestart) {
   const got = Object.keys(capturedMap).length;
   const ratio = total ? got / total : 0;
+  const caught = cause === 'caught';
   let verdict;
-  if (got === total && total > 0)
+  if (caught)
+    verdict = got > 0
+      ? '당신은 끝까지 셔터를 눌렀습니다. 그 기록만이 그들이 존재했음을 증명합니다.'
+      : '카메라를 들 새도 없이, 모든 것이 함께 스러졌습니다.';
+  else if (got === total && total > 0)
     verdict = '🏆 완벽한 기록 — 이 행성의 모든 생명이 당신의 카메라에 남았습니다.';
   else if (ratio >= 0.5)
     verdict = '사라진 세계의 절반 이상을, 당신은 기록으로 남겼습니다.';
@@ -13,6 +18,11 @@ export function showEnding({ capturedMap, total, lost }, onRestart) {
     verdict = '비록 일부지만, 당신의 기록이 그들이 존재했음을 증명합니다.';
   else
     verdict = '아무것도 담지 못한 채, 세계는 저물었습니다.';
+
+  const headline = caught ? '기록, 여기서 멈추다' : '지구 최후의 날';
+  const subtitle = caught
+    ? '당신은 운석에 휩쓸렸고, 카메라도 그곳에 묻혔습니다.'
+    : '거대 운석이 충돌했고, 이 세계는 사라졌습니다.';
 
   const style = document.createElement('style');
   style.textContent = `
@@ -52,8 +62,8 @@ export function showEnding({ capturedMap, total, lost }, onRestart) {
   root.id = 'ending';
   root.innerHTML = `
     <div class="inner">
-      <h1>지구 최후의 날</h1>
-      <div class="sub">거대 운석이 충돌했고, 이 세계는 사라졌습니다.</div>
+      <h1>${headline}</h1>
+      <div class="sub">${subtitle}</div>
       <div class="stat">${got} <small>/ ${total} 종 기록</small></div>
       <div class="verdict">${verdict}</div>
       <div class="lost">충돌로 소실된 생명체: ${lost}</div>

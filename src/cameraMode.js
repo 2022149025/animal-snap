@@ -23,6 +23,7 @@ export class CameraMode {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyC') this.toggle();
       else if (e.code === 'Tab') { e.preventDefault(); this.ui.toggleDex(); }
+      else if (e.code === 'KeyV' && !this.active && this.player) this.player.toggleView();
     });
 
     // 촬영 = 마우스 좌클릭 (카메라 모드 + 포인터 잠금 상태일 때만)
@@ -65,7 +66,7 @@ export class CameraMode {
     for (const agent of this.animalMgr.agents) {
       this._tmp.copy(agent.obj.position);
       this._tmp.y += (agent.def.h || 1) * 0.5;
-      const p = this._tmp.clone().project(cam);
+      const p = this._tmp.project(cam);
       if (p.z > 1) continue;
       const offset = Math.hypot(p.x, p.y);
       const dist = agent.obj.position.distanceTo(cam.position);

@@ -5,3 +5,15 @@ dist/
 
 # 원본 플레이어 FBX(60MB) — 런타임은 최적화된 Player.glb만 사용하므로 배포 제외
 public/assets/player/player.fbx
+
+# ── GitHub Pages 배포 슬림화 (로컬 파일은 그대로 유지, git/배포에서만 제외) ──
+# Blender 원본 / OBJ 내보내기 — 런타임 전부 미사용
+public/assets/**/Blends/
+public/assets/**/OBJ/
+# animals·nature_megapack 은 glTF만 사용 → 중복 FBX 제외
+public/assets/animals/FBX/
+public/assets/nature_megapack/FBX/
+# 코드에서 참조하지 않는 통합 GLB / 동영상 프리뷰
+public/assets/animals_of_the_land.glb
+public/assets/collection_with_17_animals.glb
+public/assets/**/*.mp4

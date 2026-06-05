@@ -5,7 +5,7 @@ export function createScene(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x87b9d4);
   // 거리 안개 — 시야 제한 + 분위기 + 원경 드로우 절감.
-  // near/far는 DayNight가 낮/밤에 따라 보간(밤에 더 자욱).
+  // near/far는 Doomsday가 종말 진행에 따라 보간(가까울수록 자욱).
   scene.fog = new THREE.Fog(0x87b9d4, 18, 75);
 
   const camera = new THREE.PerspectiveCamera(
@@ -15,7 +15,7 @@ export function createScene(canvas) {
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // 성능: 하이DPI 과다 렌더 방지(선명도 약간↓, 되돌리려면 2)
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;

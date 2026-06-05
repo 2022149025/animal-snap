@@ -1,104 +1,106 @@
-# 동물 찾기 — 게임 기획서 (Computer Graphics Term Project)
+# 사라지기 전에 (Before It's Gone) — 게임 설계서
 
-> **가제: Safari Snap — 숲속 동물 도감 탐험대**
 > Three.js 기반 3D 웹 게임 · 에셋: Quaternius.com (CC0)
-> 마감: 2026.6.5(금) 자정 · 팀 3인
+> Computer Graphics Term Project
 
 ---
 
 ## 1. 한 줄 컨셉
-저폴리 숲을 3인칭으로 탐험하며, 숨어 있는 동물들을 **카메라로 촬영해 도감(Pokédex 식)을 완성**하는 힐링 탐험 게임. 낮에는 자유 탐험, 밤에는 손전등으로 야행성 동물을 찾는다.
+막을 수 없는 거대 운석 충돌까지 사흘. 사진가가 된 플레이어가 **사라지기 전에 이 행성의 모든 생명을 카메라로 기록**하는 3인칭 탐험 게임. 시간이 흐를수록 하늘이 붉게 타오르고 운석이 쏟아지며, 미처 찍지 못한 종은 영영 사라진다.
 
-## 2. 승리 조건 / 코어 루프
-1. 플레이어가 숲 맵을 자유 이동 (WASD + 마우스)
-2. 동물들이 맵 곳곳에 배치되어 idle/걷기 (Skeletal Animation)
-3. 가까이 가면 동물이 도망 (도주 AI + 가속 물리)
-4. **C 키 → 카메라 모드**: 줌인, 조준선 안에 동물을 담아 **스페이스로 촬영**
-5. 촬영 성공 시 **도감에 등록** (이름/사진/설명) + 점수
-6. 전체 동물 도감을 모두 채우면 클리어 (또는 제한시간 내 최다 촬영)
-7. **N 키 → 낮↔밤 토글**: 밤엔 손전등(Spotlight)으로만 시야 확보, 야행성 동물 등장
+## 2. 코어 루프 / 승패
+1. 저폴리 숲을 3인칭(또는 1인칭)으로 자유 탐험한다.
+2. 아직 촬영하지 않은 동물은 푸르게 **발광**한다 — "아직 기록되지 않은 생명".
+3. **C**로 카메라(촬영) 모드 진입 → 줌·뷰파인더로 조준 → **좌클릭**으로 촬영.
+4. 촬영에 성공하면 **도감에 사진·이름·설명이 등록**된다(종 단위, 총 24종).
+5. 화면 상단 **종말 카운트다운(D-3 → D-0)** 이 흐르고, 하늘·안개·빛이 낮 → 황혼 → 주황 → 핏빛 → 암흑으로 물든다.
+6. 진행될수록 **운석 낙하**가 잦고 격렬해진다. 낙하 6초 전 지면에 경고 마커가 뜨고, 충돌 시 섬광·화면 흔들림·그을림 크레이터와 함께 **반경 내 생명체가 사망**한다.
+7. **영구 소멸**: 못 찍은 종의 마지막 개체가 죽으면 도감에 "소실됨"으로 영영 빈칸이 된다(몸도 기억도 사라짐).
+8. 플레이어도 운석에 직격당하면 **즉사** → "기록, 여기서 멈추다" 조기 엔딩.
+9. **D-0 대충돌** 시 화이트아웃 → 결과 화면(기록한 종 수 / 사진 갤러리 / 소실된 생명체 수 / 평가).
+10. 목표는 사라지기 전에 **최대한 많은 종을 기록**하는 것. 24종 전부(=완벽한 기록)는 무자비한 운석 탓에 달성이 매우 어렵고, "얼마나 남겼는가"가 곧 점수다.
 
 ## 3. 조작
 | 키 | 동작 |
 |---|---|
 | W A S D | 이동 |
-| Mouse | 시점 회전 |
 | Shift | 달리기 |
-| Space | 점프 / (카메라 모드에서) 촬영 |
-| C | 카메라 모드 토글 (줌/조준) |
-| N | 낮↔밤 전환 |
+| Space | 점프 |
+| Mouse | 시점 회전 (클릭하여 잠금) |
+| C | 카메라(촬영) 모드 토글 |
+| 좌클릭 | 촬영 |
 | Tab | 도감 열기/닫기 |
+| V | 1·3인칭 전환 |
+| Esc | 포인터 잠금 해제 → 일시정지 |
 
-## 4. CG 기법 ↔ 구현 매핑 (리포트 "기능 구현 표" 직결)
-점수의 핵심. 각 기법이 게임 안에서 **자연스럽게** 드러나도록 설계.
-
-| # | CG 기법 | 게임 내 구현 | 예정 소스 위치 |
+## 4. CG 기법 ↔ 구현 매핑 (리포트 핵심)
+| # | CG 기법 | 게임 내 구현 | 소스 |
 |---|---|---|---|
-| 1 | Skeletal Animation | Quaternius 애니 동물 idle/walk/run 전환 | animals.js |
-| 2 | Keyframe Animation | 낮↔밤 태양 궤도, 도감 UI 등장, 셔터 연출 | dayNight.js / ui.js |
-| 3 | Physically based Animation | 동물 도주 가속/방향전환, 점프 중력, 풀 흔들림 | animalAI.js / player.js |
-| 4 | Shadows | 태양 DirectionalLight 그림자 맵 (PCFSoft) | scene.js |
-| 5 | Spotlight | 야간 손전등 콘 라이트 (카메라에 부착) | flashlight.js |
-| 6 | Texture mapping | 지형/스카이박스/모델 텍스처 | world.js |
-| 7 | (기타) Fog | 거리 안개 — 분위기 + 드로우 최적화 | scene.js |
-| 8 | (기타) Postprocessing | Bloom (밤 빛 강조), Vignette | postfx.js |
-| 9 | (기타) Particles | 촬영 성공 반짝임, 낙엽/먼지 | particles.js |
-| 10 | (기타) Instancing | 나무·풀 대량 배치 성능 최적화 | world.js |
+| 1 | Skeletal Animation | 동물·플레이어의 idle/walk/run/jump 스켈레탈 애니 + 속도 기반 전환 | animals.js, player.js |
+| 2 | Keyframe 보간 | 종말 진행도에 따른 하늘·안개·태양 색 스톱 보간 | doomsday.js |
+| 3 | Physically based Animation | 동물 도주 가속·관성, 점프 중력, 물고기 부유, 카메라 트라우마 흔들림 | animalAI.js, player.js, meteors.js |
+| 4 | Shadows | 태양 DirectionalLight PCF 그림자 맵 | scene.js |
+| 5 | Spotlight | 카메라에 부착된 손전등(어두워질수록 밝아짐) | flashlight.js |
+| 6 | Texture Mapping | 지형 멀티텍스처, 모델 텍스처, 스카이 색 | world.js, scene.js |
+| 7 | Custom GLSL Shader | onBeforeCompile로 지형에 값 노이즈 기반 잔디/흙/낙엽 블렌딩 + 나무 밑 낙엽 마스크 | world.js |
+| 8 | Fog | 거리 안개(종말이 가까울수록 자욱해져 시야 제한) | scene.js, doomsday.js |
+| 9 | Instancing | 풀 대량 배치(InstancedMesh, 약 1,600개) | world.js |
+| 10 | Particles / FX | 운석 불꼬리, 크레이터 데칼, 사망 연기 고리, 화면 섬광 | meteors.js |
+| 11 | Procedural Texture | 캔버스 절차적 텍스처(잔디/흙/낙엽/그을림/발광 오라) | world.js, meteors.js, animals.js |
+| 12 | Render-to-Image | 현재 프레임 캡처 → 사진(dataURL) 도감 등록 | cameraMode.js |
+| 13 | 2D HUD / Minimap | 뷰파인더·도감·일시정지 + 캔버스 미니맵(플레이어·미촬영 종·운석 경고) | ui.js, minimap.js |
 
-> "기타" 항목(7~10)은 수업에서 안 배웠다면 리포트 **"기타 사용 기능"** 섹션에 출처·이론 정리.
+> 수업에서 다루지 않은 기법(커스텀 GLSL 셰이더, 인스턴싱, 절차적 텍스처, 화면 효과 등)은 리포트 "기타 사용 기능"에 이론·출처를 정리한다.
 
-## 5. 에셋 (Quaternius.com, 전부 CC0)
-- **Animated Animals** — 동물 본체 (핵심, 스켈레탈 애니 포함): 여우/사슴/토끼/곰/늑대 등
-- **Ultimate Nature Pack** — 나무, 바위, 풀, 버섯, 그루터기 (맵 구성)
-- **RPG Characters / Cute Characters** — 플레이어 캐릭터 (애니 포함된 것 선택)
-- 포맷: GLTF/GLB 우선 (Three.js GLTFLoader). FBX면 변환.
+## 5. 에셋 (Quaternius.com, 전부 CC0 1.0)
+- **Ultimate Animated Animals** — 사슴·여우·늑대·알파카·소·말 등 (스켈레탈 애니 내장, glTF)
+- **Ultimate Animated Characters** — 플레이어 캐릭터(Doctor_Male_Young, 애니 내장 FBX)
+- **Ultimate Nature / Nature Megapack / Trees** — 나무·바위·풀·꽃·그루터기 (FBX/glTF + 텍스처)
+- **Farm / Dino / Enemy / Fishes** — 농장동물·공룡·소형동물·연못 어류 (FBX)
+- 각 팩에 CC0 `License.txt` 포함. 런타임 미사용 포맷(Blends/OBJ 등)은 배포에서 제외.
 
-## 6. 기술 스택 / 실행 환경
-- **Three.js** (모듈 import, r160+) + Vite (개발) → 정적 빌드
-- 배포: **GitHub Pages** 또는 Vercel (브라우저 실행 필수 — 안 되면 0점)
-- 외부 라이브러리 최소화. 사용 시 리포트 출처 명시.
-- 에셋·텍스처는 상대경로로 포함 (CORS/경로 깨짐 주의)
+## 6. 기술 스택 / 실행·배포
+- **Three.js r0.184** + **Vite 8** (ES 모듈 import → 정적 빌드)
+- 로컬 실행: `start.bat` 더블클릭 (또는 `npm install` → `npm run dev`)
+- 배포: **GitHub Pages** (Actions 자동 빌드/배포, `vite base:'./'` 상대경로)
+- 미사용 대용량 에셋은 `.gitignore`로 git·배포에서 제외(로컬 보존)
 
-## 7. 폴더 구조(안)
+## 7. 폴더 구조
 ```
-3jsZombie/
+animal-snap-main/
 ├─ index.html
+├─ start.bat              # 로컬 원클릭 실행 (설치+서버)
+├─ vite.config.js
 ├─ src/
-│  ├─ main.js          # 부트스트랩, 게임 루프
-│  ├─ scene.js         # 씬/카메라/렌더러/조명/그림자/안개
-│  ├─ world.js         # 지형, 나무/풀 instancing, 텍스처
-│  ├─ player.js        # 3인칭 이동/점프/카메라 추적
-│  ├─ animals.js       # 동물 로딩, 스켈레탈 애니
-│  ├─ animalAI.js      # 도주 AI + 물리
-│  ├─ camera_mode.js   # 촬영 모드(줌/조준/판정)
-│  ├─ dayNight.js      # 낮밤 전환(keyframe)
-│  ├─ flashlight.js    # 야간 spotlight
-│  ├─ postfx.js        # bloom/vignette
-│  ├─ particles.js     # 파티클
-│  └─ ui.js            # 도감/HUD
-├─ assets/             # Quaternius 모델, 텍스처
-└─ README.md
+│  ├─ main.js             # 부트스트랩 · 게임 루프
+│  ├─ scene.js            # 씬/카메라/렌더러/조명/그림자/안개
+│  ├─ world.js            # 지형(커스텀 셰이더) · 나무/풀 배치 · 연못
+│  ├─ player.js           # 3·1인칭 이동/점프/시점 · 캐릭터 로딩(FBX/glTF)
+│  ├─ animals.js          # 동물 정의 · 로딩 · 스켈레탈 애니
+│  ├─ animalAI.js         # 배회/도주 AI · 물고기 · 매니저
+│  ├─ cameraMode.js       # 촬영 모드(줌/조준/판정/스냅샷)
+│  ├─ doomsday.js         # 종말 카운트다운(하늘·빛 보간)
+│  ├─ meteors.js          # 운석 예고·낙하·사망·화면 효과
+│  ├─ flashlight.js       # 손전등(Spotlight)
+│  ├─ minimap.js          # 코너 미니맵
+│  ├─ ending.js           # 결과 화면
+│  ├─ ui.js               # 도감/HUD/일시정지
+│  ├─ settings.js         # lil-gui 설정 패널
+│  └─ intro3d.js          # 3D 시네마틱 인트로
+├─ public/assets/         # Quaternius 모델·텍스처 (CC0)
+└─ .github/workflows/     # GitHub Pages 자동 배포
 ```
 
-## 8. 일정 (오늘 6/3 → 마감 6/5 자정, 약 2.5일)
-- **Day 0 (6/3 밤)**: 기획 확정 ✅ · 프로젝트 셋업(Vite+Three) · 에셋 다운로드 · 빈 씬+바닥+조명+3인칭 카메라
-- **Day 1 (6/4)**: 지형/나무 배치 · 플레이어 이동/애니 · 동물 1종 로딩+스켈레탈 애니 · 그림자
-- **Day 2 (6/5 오전)**: 동물 도주 AI · 카메라 촬영 모드 · 도감 UI · 낮밤+손전등
-- **Day 2 (6/5 오후)**: 파티클/포스트FX/사운드 · 밸런싱 · **배포** · 시연영상 · **리포트 작성**
+## 8. 구현 현황
+- ✅ 3·1인칭 이동·점프·중력, 마우스 포인터 잠금 시점, 일시정지
+- ✅ 커스텀 GLSL 지형, 인스턴스 풀, 연못과 헤엄치는 물고기
+- ✅ 24종 동물 로딩·스켈레탈 애니·도주 AI·미촬영 발광
+- ✅ 촬영 모드·뷰파인더·도감(종별 생존 수·소실 표시)
+- ✅ 종말 카운트다운·운석 예고/낙하·영구 소멸·플레이어 즉사
+- ✅ 미니맵·3D 시네마틱 인트로·결과 엔딩
+- ✅ GitHub Pages 배포 구성
 
-## 9. 분담 (본인 주력)
-- **본인**: 전체 코드 구현
-- **팀원 A**: 에셋 수집/정리, Quaternius 모델 선별·변환, 리포트 "기능 표" 위치 기록 보조
-- **팀원 B**: 3분 시연영상 촬영·편집(자막), 리포트 문서화·교정, 발표 자료
-
-## 10. 리스크 & 대응
-- ⏰ **시간 부족**: MVP(이동+동물1종+촬영+도감) 먼저 완성 → 이후 낮밤/파티클은 가산점성. 기능별 우선순위 사수.
-- 🌐 **브라우저 미실행=0점**: 매일 배포 테스트. 경로/CORS 사전 점검.
-- 🐾 **애니 호환**: Quaternius GLB 애니 클립 이름 확인 후 동물 선정.
-
----
-
-## 다음 단계
-1. 프로젝트 셋업(Vite + Three.js) 생성
-2. Quaternius에서 에셋 다운로드 (Animated Animals / Ultimate Nature / Characters)
-3. 첫 씬: 바닥 + 조명 + 그림자 + 3인칭 카메라 동작 확인
+## 9. 크레딧
+- 3D 에셋: **Quaternius** (quaternius.com) — CC0 1.0 Universal
+- 폰트: Nanum Myeongjo (Google Fonts)
+- 엔진: Three.js · 빌드: Vite
